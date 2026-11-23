@@ -70,9 +70,26 @@ fun AppRoot(viewModel: AppViewModel, activity: Activity) {
                         onInviteParent = { viewModel.createPairingCode(Role.PARENT) },
                         onDismissCode = viewModel::dismissPairingCode,
                         onSetFullControl = viewModel::setFullControl,
+                        onOpenChild = viewModel::openChild,
                         onSignOut = viewModel::backToWelcome,
                     )
-                    is Screen.ChildHome -> ChildHomeScreen(family = screen.family)
+                    is Screen.ChildDetail -> ChildDetailScreen(
+                        child = screen.child,
+                        canManage = screen.family.ownerUid == screen.myUid ||
+                            state.members.firstOrNull { it.uid == screen.myUid }?.fullControl == true,
+                        status = state.childStatus,
+                        apps = state.childApps,
+                        rules = state.childRules,
+                        onSetDailyLimit = viewModel::setDailyLimit,
+                        onSetAppBlocked = viewModel::setAppBlocked,
+                        onSetAppLimit = viewModel::setAppLimit,
+                        onBack = viewModel::closeChild,
+                    )
+                    is Screen.ChildHome -> ChildHomeScreen(
+                        family = screen.family,
+                        rules = state.childRules,
+                        onReport = viewModel::reportOwnDevice,
+                    )
                 }
             }
         }

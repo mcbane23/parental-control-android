@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.mcbane23.parentalcontrol.data.DeviceRepository
 import com.mcbane23.parentalcontrol.data.FamilyRepository
 import com.mcbane23.parentalcontrol.ui.AppRoot
 
@@ -21,12 +22,12 @@ class MainActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 // Firebase only starts when google-services.json was part of the build.
                 val firebaseReady = FirebaseApp.getApps(applicationContext).isNotEmpty()
-                val repo = if (firebaseReady) {
-                    FamilyRepository(FirebaseAuth.getInstance(), FirebaseFirestore.getInstance())
-                } else {
-                    null
-                }
-                return AppViewModel(repo) as T
+                if (!firebaseReady) return AppViewModel(null, null) as T
+                val db = FirebaseFirestore.getInstance()
+                return AppViewModel(
+                    FamilyRepository(FirebaseAuth.getInstance(), db),
+                    DeviceRepository(db),
+                ) as T
             }
         }
     }
