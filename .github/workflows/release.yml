@@ -1,21 +1,17 @@
 name: Release
 
 # Runs when versionName in app/build.gradle.kts changes on main. It builds the app signed with
-# the private upload key and publishes it three times:
+# the private upload key and publishes it twice:
 #   1. as a GitHub release named v<versionName> in this repository, with the APK and the AAB
-#   2. into the "parental-control" release of mcbane23/apps, together with the update
-#      manifest (parental-control.json) the app reads for its in-app update
-#   3. to the internal testing track of Google Play (the AAB)
-# A place that already has this version is skipped, so running the workflow again by hand
-# (Actions > Release > Run workflow) only fills in what is missing. Google Play cannot be
-# checked that way, so a run by hand sends the version there only when its box is ticked.
+#   2. to the internal testing track of Google Play (the AAB)
+# A version that already has a GitHub release is skipped. Running the workflow by hand
+# (Actions > Release > Run workflow) with the Google Play box ticked sends the current
+# version to Google Play again, for when that upload failed.
 #
 # Repository secrets (docs/play-release.md explains how to create them):
 #   UPLOAD_KEYSTORE_BASE64     the upload keystore, base64 encoded
 #   UPLOAD_KEYSTORE_PASSWORD   its password
 #   PLAY_SERVICE_ACCOUNT_JSON  key of the service account allowed to upload to Google Play
-#   APPS_REPO_TOKEN            fine-grained personal access token limited to mcbane23/apps
-#                              with "Contents: Read and write"
 # Optional repository variable PLAY_RELEASE_STATUS: "draft" (the default) leaves each upload
 # in Play Console for you to roll out, "completed" rolls it out to the testers right away.
 on:
@@ -35,8 +31,6 @@ permissions:
 
 env:
   PLAY_PACKAGE: com.bane23.parentalcontrol
-  APPS_REPO: mcbane23/apps
-  APPS_TAG: parental-control
 
 jobs:
   release:
@@ -66,15 +60,6 @@ jobs:
             release=false
           fi
 
-          # The apps repository is public, so its manifest can be read without a token.
-          apps=true
-          published=$(curl -fsSL "https://github.com/$APPS_REPO/releases/download/$APPS_TAG/$APPS_TAG.json" \
-            | jq -r '.versionName' 2> /dev/null || true)
-          if [ "$published" = "$name" ]; then
-            echo "$APPS_REPO already has version $name."
-            apps=false
-          fi
-
           # Google Play gets every new version, and a run by hand that asks for it.
           play=$release
           if [ "${{ inputs.play }}" = "true" ]; then
@@ -82,12 +67,11 @@ jobs:
           fi
 
           build=false
-          if [ "$release" = "true" ] || [ "$apps" = "true" ] || [ "$play" = "true" ]; then
+          if [ "$release" = "true" ] || [ "$play" = "true" ]; then
             build=true
           fi
           {
             echo "release=$release"
-            echo "apps=$apps"
             echo "play=$play"
             echo "build=$build"
           } >> "$GITHUB_OUTPUT"
@@ -134,47 +118,6 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "v$version" \
             --generate-notes
-
-      - name: Publish to the apps repository
-        if: steps.version.outputs.apps == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.APPS_REPO_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The secret APPS_REPO_TOKEN is not set, so the APK was not copied to $APPS_REPO. Add it and run this workflow again."
-            exit 1
-          fi
-          version="${{ steps.version.outputs.name }}"
-          code="${{ steps.version.outputs.code }}"
-          apk="parental-control-$version.apk"
-          commit=$(git rev-parse --short=7 HEAD)
-          sha=$(sha256sum "$apk" | cut -d ' ' -f 1)
-
-          # Notes shown in the app: commit subjects since the previous version's tag.
-          previous=$(git tag --list 'v*' --sort=-v:refname | grep -vx "v$version" | head -n 1 || true)
-          notes=$(git log -n 15 --no-merges --format='%s' ${previous:+"$previous..HEAD"})
-
-          # Same layout as the other apps there: versioned APK, an APK with a fixed name and
-          # a manifest named after the release tag.
-          cp "$apk" "$APPS_TAG.apk"
-          jq -n \
-            --argjson versionCode "$code" \
-            --arg versionName "$version" \
-            --arg apk "$apk" \
-            --arg sha256 "$sha" \
-            --arg commit "$commit" \
-            --arg notes "$notes" \
-            '{versionCode: $versionCode, versionName: $versionName, apk: $apk, sha256: $sha256, commit: $commit, notes: {en: $notes}}' \
-            > "$APPS_TAG.json"
-          cat "$APPS_TAG.json"
-
-          if ! gh release view "$APPS_TAG" --repo "$APPS_REPO" > /dev/null 2>&1; then
-            gh release create "$APPS_TAG" --repo "$APPS_REPO" --title "Parental Control" --notes ""
-          fi
-          # The manifest goes last, so it never names an APK that is not there yet.
-          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$apk" "$APPS_TAG.apk"
-          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$APPS_TAG.json"
-          gh release edit "$APPS_TAG" --repo "$APPS_REPO" --notes "Verzija $version, commit: $commit."
 
       # Last, so a problem on the Google side never holds back the GitHub release.
       - name: Check the Google Play secret
