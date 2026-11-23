@@ -30,6 +30,11 @@
         </intent>
     </queries>
 
+    <!-- Tells Google Play Protect, truthfully, that this is a parental control app. -->
+    <meta-data
+        android:name="isMonitoringTool"
+        android:value="child_monitoring" />
+
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
