@@ -1,5 +1,7 @@
 name: Build
 
+# Test build only. Nothing is uploaded or kept on GitHub.
+
 on:
   push:
     branches: [main]
@@ -15,5 +17,7 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-disabled: true
       - name: Build debug app and run unit tests
         run: ./gradlew assembleDebug testDebugUnitTest

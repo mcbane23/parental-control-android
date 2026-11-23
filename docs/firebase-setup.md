@@ -12,10 +12,9 @@ This is a one-time setup and takes about ten minutes. The free Spark plan is eno
 
 1. On the project overview, choose the Android icon (**Add app**).
 2. Android package name: `com.mcbane23.parentalcontrol`
-3. Debug signing certificate SHA-1: required for Google sign-in. In Android Studio open the Gradle panel and run `app > Tasks > android > signingReport`, or run `./gradlew signingReport` in a terminal, and copy the `SHA1` value of the `debug` variant.
+3. Debug signing certificate SHA-1: `8A:F9:1F:3E:1A:EE:6E:E6:94:D4:E1:DC:15:18:F6:6A:E2:C8:1E:1C`
+   This is the fingerprint of the debug key in `keystore/debug.keystore`. Every build is signed with it, on any computer and on GitHub, so this one value is all you need.
 4. Register the app. Do not download `google-services.json` yet, because step 3 adds information to it.
-
-Each computer that builds the app has its own debug certificate. If you build on a second computer, add its SHA-1 under **Project settings > Your apps > Add fingerprint**.
 
 ## 3. Turn on sign-in
 
@@ -39,6 +38,17 @@ Each computer that builds the app has its own debug certificate. If you build on
 
 The file is listed in `.gitignore`, so it stays on your computer and is not pushed to GitHub.
 Without it the app still builds, and shows a "Firebase is not set up" screen.
+
+## 6. Let GitHub releases use Firebase
+
+GitHub builds a release whenever the version number changes (see the README). For that
+APK to work, GitHub needs the config file too, stored as a secret.
+
+1. On GitHub open the repository, then **Settings > Secrets and variables > Actions > New repository secret**.
+2. Name: `GOOGLE_SERVICES_JSON`
+3. Value: paste the whole contents of `google-services.json`.
+
+Until the secret exists, the release workflow stops with an error instead of publishing an APK that cannot sign in.
 
 ## Trying it out
 

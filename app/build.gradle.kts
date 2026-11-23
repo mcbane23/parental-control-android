@@ -22,6 +22,17 @@ android {
         versionName = "0.1.0"
     }
 
+    // For now every build, local or on GitHub, is signed with the debug key kept in the
+    // repository, so a new version always installs over the previous one.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
