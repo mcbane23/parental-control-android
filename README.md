@@ -12,7 +12,13 @@ Step 2 of the plan, the project backbone, is in place:
 - Families, with a main parent who can give other parents full control
 - Pairing a child phone or a second parent with a one-time code
 
-Time limits, app blocking, location and tamper protection come next.
+Step 3 has started:
+
+- The child phone counts app usage and reports it to the family
+- Parents set a daily limit, per-app limits and blocked apps from their phone
+- The child phone enforces them with an accessibility service, also when offline
+
+Location, keeping mobile data on and tamper protection come next.
 
 ## Building
 

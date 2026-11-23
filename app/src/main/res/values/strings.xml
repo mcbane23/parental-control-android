@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Parental Control</string>
+    <string name="accessibility_description">Lets Parental Control see which app is open on this phone, so it can apply the time limits and blocked apps a parent has set. It does not read what is typed or shown inside apps.</string>
 </resources>
