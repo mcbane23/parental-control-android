@@ -16,6 +16,8 @@ import kotlinx.coroutines.tasks.await
  * Firestore layout, under families/{familyId}/devices/{childUid}:
  *  - (the document itself)  -> lastSeen, day, usedTodayMs, usageAccess, accessibility
  *  - reports/usage          -> day, apps: { package: { label, ms } }
+ *  - reports/location       -> lat, lng, accuracy, time, battery
+ *  - settings/locate        -> at (a parent asking for a fresh position)
  *  - settings/rules         -> dailyLimitMinutes, apps: { package: { blocked, limitMinutes } }
  *
  * Usage and rules each live in a single document so that a sync is one write, not one per app.
@@ -27,6 +29,12 @@ class DeviceRepository(private val db: FirebaseFirestore) {
 
     private fun usageDoc(familyId: String, childUid: String) =
         device(familyId, childUid).collection("reports").document("usage")
+
+    private fun locationDoc(familyId: String, childUid: String) =
+        device(familyId, childUid).collection("reports").document("location")
+
+    private fun locateDoc(familyId: String, childUid: String) =
+        device(familyId, childUid).collection("settings").document("locate")
 
     private fun rulesDoc(familyId: String, childUid: String) =
         device(familyId, childUid).collection("settings").document("rules")
@@ -45,6 +53,7 @@ class DeviceRepository(private val db: FirebaseFirestore) {
                 "usedTodayMs" to status.usedTodayMs,
                 "usageAccess" to status.usageAccess,
                 "accessibility" to status.accessibility,
+                "locationAccess" to status.locationAccess,
             ),
         )
         batch.set(
@@ -69,6 +78,8 @@ class DeviceRepository(private val db: FirebaseFirestore) {
                 usedTodayMs = doc.getLong("usedTodayMs") ?: 0L,
                 usageAccess = doc.getBoolean("usageAccess") == true,
                 accessibility = doc.getBoolean("accessibility") == true,
+                // Phones on an older app version do not report this; do not warn about them.
+                locationAccess = doc.getBoolean("locationAccess") != false,
             )
         }
 
@@ -98,6 +109,44 @@ class DeviceRepository(private val db: FirebaseFirestore) {
                     )
                 }.toMap(),
             )
+        }
+
+    /** Called on the child phone. Queued by Firestore when offline, like [report]. */
+    fun reportLocation(familyId: String, childUid: String, location: ChildLocation) {
+        locationDoc(familyId, childUid).set(
+            mapOf(
+                "lat" to location.latitude,
+                "lng" to location.longitude,
+                "accuracy" to location.accuracyMeters,
+                "time" to location.timeMillis,
+                "battery" to location.batteryPercent,
+            ),
+        )
+    }
+
+    fun location(familyId: String, childUid: String): Flow<ChildLocation?> =
+        locationDoc(familyId, childUid).snapshots { doc ->
+            val lat = doc.getDouble("lat")
+            val lng = doc.getDouble("lng")
+            if (lat == null || lng == null) return@snapshots null
+            ChildLocation(
+                latitude = lat,
+                longitude = lng,
+                accuracyMeters = doc.getDouble("accuracy")?.toFloat(),
+                timeMillis = doc.getLong("time") ?: 0L,
+                batteryPercent = doc.getLong("battery")?.toInt(),
+            )
+        }
+
+    /** A parent asks the child phone for a fresh, precise position. */
+    suspend fun requestLocation(familyId: String, childUid: String) {
+        locateDoc(familyId, childUid).set(mapOf("at" to FieldValue.serverTimestamp())).await()
+    }
+
+    /** On the child phone: the time of the latest request, in milliseconds. */
+    fun locateRequests(familyId: String, childUid: String): Flow<Long> =
+        locateDoc(familyId, childUid).snapshots { doc ->
+            doc.getTimestamp("at", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L
         }
 
     suspend fun setDailyLimit(familyId: String, childUid: String, minutes: Int?) {

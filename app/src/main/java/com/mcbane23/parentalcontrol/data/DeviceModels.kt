@@ -9,6 +9,16 @@ data class DeviceStatus(
     /** Whether the child phone has granted the two permissions the rules depend on. */
     val usageAccess: Boolean,
     val accessibility: Boolean,
+    /** Location permission, including "Allow all the time". */
+    val locationAccess: Boolean,
+)
+
+data class ChildLocation(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyMeters: Float?,
+    val timeMillis: Long,
+    val batteryPercent: Int?,
 )
 
 data class AppUsage(

@@ -15,8 +15,8 @@ android {
         applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // For now every build, local or on GitHub, is signed with the debug key kept in the
@@ -68,6 +68,9 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play)
     implementation(libs.googleid)
+
+    implementation(libs.play.services.location)
+    implementation(libs.osmdroid)
 
     testImplementation(libs.junit)
 }

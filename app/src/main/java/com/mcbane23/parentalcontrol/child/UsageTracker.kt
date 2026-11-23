@@ -131,6 +131,7 @@ object UsageTracker {
             usedTodayMs = countedTotal(usage, counted),
             usageAccess = hasUsageAccess(context),
             accessibility = isAccessibilityEnabled(context),
+            locationAccess = LocationPermissions.hasAll(context),
         )
         val list = counted.map { AppUsage(it, apps.getValue(it), usage[it] ?: 0L) }
         return Snapshot(status, list, usage)

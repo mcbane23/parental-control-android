@@ -18,7 +18,10 @@ Step 3 has started:
 - Parents set a daily limit, per-app limits and blocked apps from their phone
 - The child phone enforces them with an accessibility service, also when offline
 
-Location, keeping mobile data on and tamper protection come next.
+- The child phone shares its location from a foreground service, and parents see it on an
+  OpenStreetMap map with a refresh button
+
+Keeping mobile data on and tamper protection come next.
 
 ## Building
 

@@ -45,6 +45,7 @@ class GuardAccessibilityService : AccessibilityService() {
     private var lastEventPackage: String? = null
 
     override fun onServiceConnected() {
+        LocationService.start(this)
         scope.launch {
             while (isActive) {
                 runCatching { tick() }

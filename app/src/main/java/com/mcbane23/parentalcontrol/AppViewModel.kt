@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mcbane23.parentalcontrol.data.AppRule
 import com.mcbane23.parentalcontrol.data.AppUsage
+import com.mcbane23.parentalcontrol.data.ChildLocation
 import com.mcbane23.parentalcontrol.data.ChildRules
 import com.mcbane23.parentalcontrol.data.DeviceRepository
 import com.mcbane23.parentalcontrol.data.DeviceStatus
@@ -48,6 +49,7 @@ data class UiState(
     val childStatus: DeviceStatus? = null,
     val childApps: List<AppUsage> = emptyList(),
     val childRules: ChildRules = ChildRules(),
+    val childLocation: ChildLocation? = null,
 )
 
 class AppViewModel(
@@ -118,6 +120,11 @@ class AppViewModel(
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         val rule = _state.value.childRules.apps[packageName] ?: AppRule()
         requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(limitMinutes = minutes))
+    }
+
+    fun refreshLocation() = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        requireDevices().requestLocation(detail.family.id, detail.child.uid)
     }
 
     /** Called by the child screen with what it just read from Android. */
@@ -224,6 +231,11 @@ class AppViewModel(
                         .collect { status -> _state.update { it.copy(childStatus = status) } }
                 }
                 launch {
+                    devices.location(familyId, childUid)
+                        .catch { e -> _state.update { it.copy(error = e.message) } }
+                        .collect { location -> _state.update { it.copy(childLocation = location) } }
+                }
+                launch {
                     devices.apps(familyId, childUid)
                         .catch { e -> _state.update { it.copy(error = e.message) } }
                         .collect { apps -> _state.update { it.copy(childApps = apps) } }
@@ -235,7 +247,7 @@ class AppViewModel(
     private fun stopWatchingChild() {
         childJob?.cancel()
         childJob = null
-        _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules()) }
+        _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules(), childLocation = null) }
     }
 
     private fun requireDevices(): DeviceRepository = checkNotNull(devices) { "Firebase is not set up." }
