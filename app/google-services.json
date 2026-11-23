@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "939157063178",
+    "project_id": "parental-control-574fb",
+    "storage_bucket": "parental-control-574fb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:939157063178:android:3c3e0341af1edc4dff01f3",
+        "android_client_info": {
+          "package_name": "com.bane23.parentalcontrol"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "939157063178-ivu7d8lee9m4tev6600vgrc218oher9f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bane23.parentalcontrol",
+            "certificate_hash": "8af91f3e1aee6ee694d4e1dc1518f66ae2c81e1c"
+          }
+        },
+        {
+          "client_id": "939157063178-r0fpeje62foampot38irh5dnnq3r5300.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCYNhfikjsIq1A4yQdUCy8fHyI_X-YymK8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "939157063178-r0fpeje62foampot38irh5dnnq3r5300.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
