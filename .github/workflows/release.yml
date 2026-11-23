@@ -1,15 +1,27 @@
 name: Release
 
-# Publishes a GitHub release with the APK when versionName in app/build.gradle.kts
-# changes on main. A version that already has a release is skipped.
+# Runs when versionName in app/build.gradle.kts changes on main and publishes the APK twice:
+#   1. as a GitHub release named v<versionName> in this repository
+#   2. into the "parental-control" release of mcbane23/apps, together with the update
+#      manifest (parental-control.json) the app reads for its in-app update
+# A place that already has this version is skipped, so running the workflow again by hand
+# (Actions > Release > Run workflow) only fills in what is missing.
+#
+# Step 2 needs the repository secret APPS_REPO_TOKEN: a fine-grained personal access token
+# limited to mcbane23/apps with "Contents: Read and write".
 on:
   push:
     branches: [main]
     paths:
       - app/build.gradle.kts
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+env:
+  APPS_REPO: mcbane23/apps
+  APPS_TAG: parental-control
 
 jobs:
   release:
@@ -18,43 +30,99 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags, for the release notes
 
       - name: Read version
         id: version
         run: |
           name=$(sed -n 's/^ *versionName *= *"\(.*\)".*/\1/p' app/build.gradle.kts | head -n 1)
-          if [ -z "$name" ]; then
-            echo "Could not read versionName from app/build.gradle.kts" >&2
+          code=$(sed -n 's/^ *versionCode *= *\([0-9][0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+          if [ -z "$name" ] || [ -z "$code" ]; then
+            echo "Could not read versionName and versionCode from app/build.gradle.kts" >&2
             exit 1
           fi
           echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
           if gh release view "v$name" > /dev/null 2>&1; then
-            echo "Release v$name already exists, nothing to do."
-            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Release v$name already exists here."
+            echo "release=false" >> "$GITHUB_OUTPUT"
           else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          # The apps repository is public, so its manifest can be read without a token.
+          published=$(curl -fsSL "https://github.com/$APPS_REPO/releases/download/$APPS_TAG/$APPS_TAG.json" \
+            | jq -r '.versionName' 2> /dev/null || true)
+          if [ "$published" = "$name" ]; then
+            echo "$APPS_REPO already has version $name."
+            echo "apps=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "apps=true" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/setup-java@v4
-        if: steps.version.outputs.needed == 'true'
+        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
         with:
           distribution: temurin
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.version.outputs.needed == 'true'
+        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
 
       - name: Build APK
-        if: steps.version.outputs.needed == 'true'
-        run: ./gradlew assembleDebug
+        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
+        run: |
+          ./gradlew assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk "parental-control-${{ steps.version.outputs.name }}.apk"
 
       - name: Publish release
-        if: steps.version.outputs.needed == 'true'
+        if: steps.version.outputs.release == 'true'
         run: |
           version="${{ steps.version.outputs.name }}"
-          apk="parental-control-$version.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
-          gh release create "v$version" "$apk" \
+          gh release create "v$version" "parental-control-$version.apk" \
             --target "$GITHUB_SHA" \
             --title "v$version" \
             --generate-notes
+
+      - name: Publish to the apps repository
+        if: steps.version.outputs.apps == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.APPS_REPO_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The secret APPS_REPO_TOKEN is not set, so the APK was not copied to $APPS_REPO. Add it and run this workflow again."
+            exit 1
+          fi
+          version="${{ steps.version.outputs.name }}"
+          code="${{ steps.version.outputs.code }}"
+          apk="parental-control-$version.apk"
+          commit=$(git rev-parse --short=7 HEAD)
+          sha=$(sha256sum "$apk" | cut -d ' ' -f 1)
+
+          # Notes shown in the app: commit subjects since the previous version's tag.
+          previous=$(git tag --list 'v*' --sort=-v:refname | grep -vx "v$version" | head -n 1 || true)
+          notes=$(git log -n 15 --no-merges --format='%s' ${previous:+"$previous..HEAD"})
+
+          # Same layout as the other apps there: versioned APK, an APK with a fixed name and
+          # a manifest named after the release tag.
+          cp "$apk" "$APPS_TAG.apk"
+          jq -n \
+            --argjson versionCode "$code" \
+            --arg versionName "$version" \
+            --arg apk "$apk" \
+            --arg sha256 "$sha" \
+            --arg commit "$commit" \
+            --arg notes "$notes" \
+            '{versionCode: $versionCode, versionName: $versionName, apk: $apk, sha256: $sha256, commit: $commit, notes: {en: $notes}}' \
+            > "$APPS_TAG.json"
+          cat "$APPS_TAG.json"
+
+          if ! gh release view "$APPS_TAG" --repo "$APPS_REPO" > /dev/null 2>&1; then
+            gh release create "$APPS_TAG" --repo "$APPS_REPO" --title "Parental Control" --notes ""
+          fi
+          # The manifest goes last, so it never names an APK that is not there yet.
+          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$apk" "$APPS_TAG.apk"
+          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$APPS_TAG.json"
+          gh release edit "$APPS_TAG" --repo "$APPS_REPO" --notes "Verzija $version, commit: $commit."

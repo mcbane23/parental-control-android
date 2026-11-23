@@ -73,6 +73,7 @@ fun WelcomeScreen(busy: Boolean, onParent: () -> Unit, onChild: () -> Unit) {
             "You will need a pairing code from a parent's phone.",
             style = MaterialTheme.typography.bodySmall,
         )
+        UpdateCard()
     }
 }
 

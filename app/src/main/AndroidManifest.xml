@@ -3,6 +3,9 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-app updates: the app downloads its own newer APK and hands it to the installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <!-- Granted by the person in Settings > Usage access, not at install time. -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -34,6 +37,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
 
         <activity
             android:name=".child.BlockedActivity"
