@@ -111,6 +111,7 @@ fun ParentHomeScreen(
                 }
             }
         }
+        item { UpdateCard() }
         item {
             TextButton(onClick = onSignOut, enabled = !busy) { Text("Sign out") }
         }

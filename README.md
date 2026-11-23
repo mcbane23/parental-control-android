@@ -37,6 +37,20 @@ to `versionName` reaches `main`, GitHub builds the app and publishes a release n
 `v<versionName>` with the APK attached. Raise `versionCode` at the same time, or Android
 will refuse to install the new APK over the old one.
 
+The same run copies the APK into the `parental-control` release of
+[mcbane23/apps](https://github.com/mcbane23/apps/releases/tag/parental-control), next to
+`parental-control.json`, which names the newest version. For that the repository needs the
+secret `APPS_REPO_TOKEN`: a fine-grained personal access token limited to `mcbane23/apps`
+with "Contents: Read and write". If the copy fails, fix the cause and run the Release
+workflow by hand from the Actions tab; it only fills in what is missing.
+
+## Updating from inside the app
+
+The card "App version" on the welcome and home screens checks that manifest when the app
+opens and on "Check for update". "Update now" downloads the APK, checks its SHA-256 against
+the manifest and hands it to the Android installer. The first time, Android asks to allow
+installs from this app.
+
 All builds are signed with the debug key in `keystore/debug.keystore`. That is fine for
 family use. A Play Store release will need a private key that is not in the repository.
 

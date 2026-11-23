@@ -183,6 +183,8 @@ fun ChildHomeScreen(
                 }
             }
         }
+
+        UpdateCard()
     }
 }
 

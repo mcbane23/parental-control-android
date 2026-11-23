@@ -15,7 +15,7 @@ android {
         applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
+        versionCode = 4
         versionName = "0.3.0"
     }
 
@@ -73,4 +73,6 @@ dependencies {
     implementation(libs.osmdroid)
 
     testImplementation(libs.junit)
+    // Android only ships stubs of org.json to unit tests.
+    testImplementation(libs.json)
 }
