@@ -4,6 +4,11 @@ import android.app.Activity
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mcbane23.parentalcontrol.data.AppRule
+import com.mcbane23.parentalcontrol.data.AppUsage
+import com.mcbane23.parentalcontrol.data.ChildRules
+import com.mcbane23.parentalcontrol.data.DeviceRepository
+import com.mcbane23.parentalcontrol.data.DeviceStatus
 import com.mcbane23.parentalcontrol.data.Family
 import com.mcbane23.parentalcontrol.data.FamilyRepository
 import com.mcbane23.parentalcontrol.data.GoogleSignIn
@@ -28,7 +33,9 @@ sealed interface Screen {
     data object ParentSetup : Screen
     data object ChildPairing : Screen
     data class ParentHome(val family: Family, val myUid: String) : Screen
-    data class ChildHome(val family: Family) : Screen
+    /** A parent looking at one child: usage, limits and blocked apps. */
+    data class ChildDetail(val family: Family, val myUid: String, val child: Member) : Screen
+    data class ChildHome(val family: Family, val myUid: String) : Screen
 }
 
 data class UiState(
@@ -37,13 +44,21 @@ data class UiState(
     val error: String? = null,
     val members: List<Member> = emptyList(),
     val pairingCode: PairingCode? = null,
+    /** On a parent's phone: the child being looked at. On a child's phone: this phone. */
+    val childStatus: DeviceStatus? = null,
+    val childApps: List<AppUsage> = emptyList(),
+    val childRules: ChildRules = ChildRules(),
 )
 
-class AppViewModel(private val repo: FamilyRepository?) : ViewModel() {
+class AppViewModel(
+    private val repo: FamilyRepository?,
+    private val devices: DeviceRepository?,
+) : ViewModel() {
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var membersJob: Job? = null
+    private var childJob: Job? = null
 
     init {
         if (repo == null) {
@@ -72,7 +87,44 @@ class AppViewModel(private val repo: FamilyRepository?) : ViewModel() {
     fun backToWelcome() {
         requireRepo().signOut()
         stopWatchingMembers()
+        stopWatchingChild()
         _state.value = UiState(screen = Screen.Welcome)
+    }
+
+    fun openChild(child: Member) {
+        val home = _state.value.screen as? Screen.ParentHome ?: return
+        _state.update { it.copy(screen = Screen.ChildDetail(home.family, home.myUid, child)) }
+        watchChild(home.family.id, child.uid, withReports = true)
+    }
+
+    fun closeChild() {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return
+        stopWatchingChild()
+        _state.update { it.copy(screen = Screen.ParentHome(detail.family, detail.myUid)) }
+    }
+
+    fun setDailyLimit(minutes: Int?) = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        requireDevices().setDailyLimit(detail.family.id, detail.child.uid, minutes)
+    }
+
+    fun setAppBlocked(packageName: String, blocked: Boolean) = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        val rule = _state.value.childRules.apps[packageName] ?: AppRule()
+        requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(blocked = blocked))
+    }
+
+    fun setAppLimit(packageName: String, minutes: Int?) = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        val rule = _state.value.childRules.apps[packageName] ?: AppRule()
+        requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(limitMinutes = minutes))
+    }
+
+    /** Called by the child screen with what it just read from Android. */
+    fun reportOwnDevice(status: DeviceStatus, apps: List<AppUsage>) {
+        val home = _state.value.screen as? Screen.ChildHome ?: return
+        _state.update { it.copy(childStatus = status) }
+        runCatching { requireDevices().report(home.family.id, home.myUid, status, apps) }
     }
 
     fun createFamily(familyName: String, parentName: String) = launchAction {
@@ -134,7 +186,10 @@ class AppViewModel(private val repo: FamilyRepository?) : ViewModel() {
                 _state.update { it.copy(screen = Screen.ParentHome(family, profile.uid)) }
                 watchMembers(family.id)
             }
-            Role.CHILD -> _state.update { it.copy(screen = Screen.ChildHome(family)) }
+            Role.CHILD -> {
+                _state.update { it.copy(screen = Screen.ChildHome(family, profile.uid)) }
+                watchChild(family.id, profile.uid, withReports = false)
+            }
         }
     }
 
@@ -151,6 +206,39 @@ class AppViewModel(private val repo: FamilyRepository?) : ViewModel() {
         membersJob?.cancel()
         membersJob = null
     }
+
+    /** Follows one child phone's rules and, for parents, what that phone reports. */
+    private fun watchChild(familyId: String, childUid: String, withReports: Boolean) {
+        stopWatchingChild()
+        val devices = requireDevices()
+        childJob = viewModelScope.launch {
+            launch {
+                devices.rules(familyId, childUid)
+                    .catch { e -> _state.update { it.copy(error = e.message) } }
+                    .collect { rules -> _state.update { it.copy(childRules = rules) } }
+            }
+            if (withReports) {
+                launch {
+                    devices.status(familyId, childUid)
+                        .catch { e -> _state.update { it.copy(error = e.message) } }
+                        .collect { status -> _state.update { it.copy(childStatus = status) } }
+                }
+                launch {
+                    devices.apps(familyId, childUid)
+                        .catch { e -> _state.update { it.copy(error = e.message) } }
+                        .collect { apps -> _state.update { it.copy(childApps = apps) } }
+                }
+            }
+        }
+    }
+
+    private fun stopWatchingChild() {
+        childJob?.cancel()
+        childJob = null
+        _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules()) }
+    }
+
+    private fun requireDevices(): DeviceRepository = checkNotNull(devices) { "Firebase is not set up." }
 
     private fun requireRepo(): FamilyRepository = checkNotNull(repo) { "Firebase is not set up." }
 

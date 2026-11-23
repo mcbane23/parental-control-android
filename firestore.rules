@@ -76,6 +76,24 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullControl', 'name']);
         allow delete: if isOwner(fid) && uid != request.auth.uid;
       }
+
+      // One document per child phone, plus what it reports and the rules parents set for it.
+      match /devices/{uid} {
+        allow read: if isMember(fid);
+        // Only the child phone itself writes its status and usage report.
+        allow write: if isMember(fid) && request.auth.uid == uid;
+
+        match /reports/{report} {
+          allow read: if isMember(fid);
+          allow write: if isMember(fid) && request.auth.uid == uid;
+        }
+
+        // Limits and blocked apps. Only parents with full control can change them.
+        match /settings/{setting} {
+          allow read: if isMember(fid);
+          allow write: if isManager(fid);
+        }
+      }
     }
 
     // Short-lived codes. Anyone signed in can look one up by its exact value, nobody can list them.

@@ -38,6 +38,7 @@ fun ParentHomeScreen(
     onInviteParent: () -> Unit,
     onDismissCode: () -> Unit,
     onSetFullControl: (Member, Boolean) -> Unit,
+    onOpenChild: (Member) -> Unit,
     onSignOut: () -> Unit,
 ) {
     val me = members.firstOrNull { it.uid == myUid }
@@ -61,10 +62,10 @@ fun ParentHomeScreen(
             item { Text("No child phones are paired yet.") }
         }
         items(children, key = { it.uid }) { child ->
-            Card(Modifier.fillMaxWidth()) {
+            Card(onClick = { onOpenChild(child) }, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(child.name, style = MaterialTheme.typography.titleMedium)
-                    Text("Paired. Limits, apps and location arrive in the next steps.")
+                    Text("Tap to see usage and set limits.")
                 }
             }
         }
@@ -142,22 +143,5 @@ fun ParentHomeScreen(
                 }
             },
         )
-    }
-}
-
-@Composable
-fun ChildHomeScreen(family: Family) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("This phone is paired", style = MaterialTheme.typography.headlineSmall)
-        Text("Family: ${family.name}", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Time limits, app rules and location sharing will appear here.",
-            textAlign = TextAlign.Center,
-        )
-        UpdateCard()
     }
 }
