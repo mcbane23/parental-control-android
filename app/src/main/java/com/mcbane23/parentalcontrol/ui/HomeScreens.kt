@@ -110,6 +110,7 @@ fun ParentHomeScreen(
                 }
             }
         }
+        item { UpdateCard() }
         item {
             TextButton(onClick = onSignOut, enabled = !busy) { Text("Sign out") }
         }
@@ -157,5 +158,6 @@ fun ChildHomeScreen(family: Family) {
             "Time limits, app rules and location sharing will appear here.",
             textAlign = TextAlign.Center,
         )
+        UpdateCard()
     }
 }

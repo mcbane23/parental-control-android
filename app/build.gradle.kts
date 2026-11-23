@@ -15,8 +15,8 @@ android {
         applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     // For now every build, local or on GitHub, is signed with the debug key kept in the
@@ -70,4 +70,6 @@ dependencies {
     implementation(libs.googleid)
 
     testImplementation(libs.junit)
+    // Android only ships stubs of org.json to unit tests.
+    testImplementation(libs.json)
 }
