@@ -16,7 +16,7 @@ Time limits, app blocking, location and tamper protection come next.
 
 ## Building
 
-1. Follow [docs/firebase-setup.md](docs/firebase-setup.md) and put `google-services.json` in `app/`.
+1. The Firebase config `app/google-services.json` is in the repository. [docs/firebase-setup.md](docs/firebase-setup.md) describes how the Firebase project was set up.
 2. Open the project in Android Studio and run the `app` configuration, or run `./gradlew assembleDebug`.
 
 Requires JDK 17 and Android SDK 35. Minimum Android version is 9 (API 28).

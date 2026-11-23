@@ -2,20 +2,17 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
-// The Firebase config file is not in the repository. Without it the app still
-// builds, and shows a "Firebase is not set up" screen. See docs/firebase-setup.md.
-if (file("google-services.json").exists()) {
-    apply(plugin = "com.google.gms.google-services")
-}
 
 android {
     namespace = "com.mcbane23.parentalcontrol"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.mcbane23.parentalcontrol"
+        // Must match the package name registered in Firebase (app/google-services.json).
+        applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
         targetSdk = 35
         versionCode = 1

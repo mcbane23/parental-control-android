@@ -11,7 +11,7 @@ This is a one-time setup and takes about ten minutes. The free Spark plan is eno
 ## 2. Add the Android app
 
 1. On the project overview, choose the Android icon (**Add app**).
-2. Android package name: `com.mcbane23.parentalcontrol`
+2. Android package name: `com.bane23.parentalcontrol`
 3. Debug signing certificate SHA-1: `8A:F9:1F:3E:1A:EE:6E:E6:94:D4:E1:DC:15:18:F6:6A:E2:C8:1E:1C`
    This is the fingerprint of the debug key in `keystore/debug.keystore`. Every build is signed with it, on any computer and on GitHub, so this one value is all you need.
 4. Register the app. Do not download `google-services.json` yet, because step 3 adds information to it.
@@ -33,22 +33,11 @@ This is a one-time setup and takes about ten minutes. The free Spark plan is eno
 
 1. Go to **Project settings** (the gear icon) **> Your apps**.
 2. Download `google-services.json`.
-3. Put it in the `app/` folder of this project, next to `build.gradle.kts`.
-4. Sync and run the app from Android Studio.
+3. Put it in the `app/` folder of this project, next to `build.gradle.kts`, and commit it.
 
-The file is listed in `.gitignore`, so it stays on your computer and is not pushed to GitHub.
-Without it the app still builds, and shows a "Firebase is not set up" screen.
-
-## 6. Let GitHub releases use Firebase
-
-GitHub builds a release whenever the version number changes (see the README). For that
-APK to work, GitHub needs the config file too, stored as a secret.
-
-1. On GitHub open the repository, then **Settings > Secrets and variables > Actions > New repository secret**.
-2. Name: `GOOGLE_SERVICES_JSON`
-3. Value: paste the whole contents of `google-services.json`.
-
-Until the secret exists, the release workflow stops with an error instead of publishing an APK that cannot sign in.
+The file is kept in the repository, so local builds and GitHub releases all use the same
+Firebase project. It identifies the project but grants no access by itself. Access is
+controlled by the sign-in settings and by `firestore.rules`, so keep those rules published.
 
 ## Trying it out
 
