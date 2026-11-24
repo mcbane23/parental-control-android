@@ -21,3 +21,7 @@ jobs:
           cache-disabled: true
       - name: Build debug app and run unit tests
         run: ./gradlew assembleDebug testDebugUnitTest
+      # Unsigned here, because pull requests have no access to the upload key. This only
+      # checks that the bundle the Release workflow sends to Google Play still builds.
+      - name: Build release bundle
+        run: ./gradlew bundleRelease

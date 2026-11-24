@@ -139,7 +139,7 @@ fun ChildHomeScreen(
             }
         }
 
-        UpdateCard()
+        AppVersion()
     }
 }
 

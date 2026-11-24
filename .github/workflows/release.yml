@@ -1,27 +1,36 @@
 name: Release
 
-# Runs when versionName in app/build.gradle.kts changes on main and publishes the APK twice:
-#   1. as a GitHub release named v<versionName> in this repository
-#   2. into the "parental-control" release of mcbane23/apps, together with the update
-#      manifest (parental-control.json) the app reads for its in-app update
-# A place that already has this version is skipped, so running the workflow again by hand
-# (Actions > Release > Run workflow) only fills in what is missing.
+# Runs when versionName in app/build.gradle.kts changes on main. It builds the app signed with
+# the private upload key and publishes it twice:
+#   1. as a GitHub release named v<versionName> in this repository, with the APK and the AAB
+#   2. to the internal testing track of Google Play (the AAB)
+# A version that already has a GitHub release is skipped. Running the workflow by hand
+# (Actions > Release > Run workflow) with the Google Play box ticked sends the current
+# version to Google Play again, for when that upload failed.
 #
-# Step 2 needs the repository secret APPS_REPO_TOKEN: a fine-grained personal access token
-# limited to mcbane23/apps with "Contents: Read and write".
+# Repository secrets (docs/play-release.md explains how to create them):
+#   UPLOAD_KEYSTORE_BASE64     the upload keystore, base64 encoded
+#   UPLOAD_KEYSTORE_PASSWORD   its password
+#   PLAY_SERVICE_ACCOUNT_JSON  key of the service account allowed to upload to Google Play
+# Optional repository variable PLAY_RELEASE_STATUS: "draft" (the default) leaves each upload
+# in Play Console for you to roll out, "completed" rolls it out to the testers right away.
 on:
   push:
     branches: [main]
     paths:
       - app/build.gradle.kts
   workflow_dispatch:
+    inputs:
+      play:
+        description: Upload this version to Google Play internal testing
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 env:
-  APPS_REPO: mcbane23/apps
-  APPS_TAG: parental-control
+  PLAY_PACKAGE: com.bane23.parentalcontrol
 
 jobs:
   release:
@@ -45,84 +54,92 @@ jobs:
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "code=$code" >> "$GITHUB_OUTPUT"
 
+          release=true
           if gh release view "v$name" > /dev/null 2>&1; then
             echo "Release v$name already exists here."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "release=true" >> "$GITHUB_OUTPUT"
+            release=false
           fi
 
-          # The apps repository is public, so its manifest can be read without a token.
-          published=$(curl -fsSL "https://github.com/$APPS_REPO/releases/download/$APPS_TAG/$APPS_TAG.json" \
-            | jq -r '.versionName' 2> /dev/null || true)
-          if [ "$published" = "$name" ]; then
-            echo "$APPS_REPO already has version $name."
-            echo "apps=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "apps=true" >> "$GITHUB_OUTPUT"
+          # Google Play gets every new version, and a run by hand that asks for it.
+          play=$release
+          if [ "${{ inputs.play }}" = "true" ]; then
+            play=true
           fi
+
+          build=false
+          if [ "$release" = "true" ] || [ "$play" = "true" ]; then
+            build=true
+          fi
+          {
+            echo "release=$release"
+            echo "play=$play"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-java@v4
-        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
+        if: steps.version.outputs.build == 'true'
         with:
           distribution: temurin
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
+        if: steps.version.outputs.build == 'true'
 
-      - name: Build APK
-        if: steps.version.outputs.release == 'true' || steps.version.outputs.apps == 'true'
+      - name: Prepare the upload key
+        if: steps.version.outputs.build == 'true'
+        env:
+          UPLOAD_KEYSTORE_BASE64: ${{ secrets.UPLOAD_KEYSTORE_BASE64 }}
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
         run: |
-          ./gradlew assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk "parental-control-${{ steps.version.outputs.name }}.apk"
+          if [ -z "$UPLOAD_KEYSTORE_BASE64" ] || [ -z "$UPLOAD_KEYSTORE_PASSWORD" ]; then
+            echo "::error::The secrets UPLOAD_KEYSTORE_BASE64 and UPLOAD_KEYSTORE_PASSWORD are not set, so nothing was built. Add them (docs/play-release.md) and run this workflow again."
+            exit 1
+          fi
+          # Outside the checkout, so the key can never end up in a release or a commit.
+          echo "$UPLOAD_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/upload.jks"
+          echo "UPLOAD_KEYSTORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Build signed APK and AAB
+        if: steps.version.outputs.build == 'true'
+        env:
+          UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease bundleRelease
+          # An unsigned build has another file name, so this fails rather than publish one.
+          cp app/build/outputs/apk/release/app-release.apk "parental-control-${{ steps.version.outputs.name }}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "parental-control-${{ steps.version.outputs.name }}.aab"
+          rm -f "$RUNNER_TEMP/upload.jks"
 
       - name: Publish release
         if: steps.version.outputs.release == 'true'
         run: |
           version="${{ steps.version.outputs.name }}"
-          gh release create "v$version" "parental-control-$version.apk" \
+          gh release create "v$version" "parental-control-$version.apk" "parental-control-$version.aab" \
             --target "$GITHUB_SHA" \
             --title "v$version" \
             --generate-notes
 
-      - name: Publish to the apps repository
-        if: steps.version.outputs.apps == 'true'
+      # Last, so a problem on the Google side never holds back the GitHub release.
+      - name: Check the Google Play secret
+        id: play
+        if: steps.version.outputs.play == 'true'
         env:
-          GH_TOKEN: ${{ secrets.APPS_REPO_TOKEN }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::error::The secret APPS_REPO_TOKEN is not set, so the APK was not copied to $APPS_REPO. Add it and run this workflow again."
-            exit 1
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::warning::The secret PLAY_SERVICE_ACCOUNT_JSON is not set, so this version was not sent to Google Play. Upload the AAB from the GitHub release by hand, or add the secret (docs/play-release.md) and run this workflow again with the Google Play box ticked."
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "upload=true" >> "$GITHUB_OUTPUT"
           fi
-          version="${{ steps.version.outputs.name }}"
-          code="${{ steps.version.outputs.code }}"
-          apk="parental-control-$version.apk"
-          commit=$(git rev-parse --short=7 HEAD)
-          sha=$(sha256sum "$apk" | cut -d ' ' -f 1)
 
-          # Notes shown in the app: commit subjects since the previous version's tag.
-          previous=$(git tag --list 'v*' --sort=-v:refname | grep -vx "v$version" | head -n 1 || true)
-          notes=$(git log -n 15 --no-merges --format='%s' ${previous:+"$previous..HEAD"})
-
-          # Same layout as the other apps there: versioned APK, an APK with a fixed name and
-          # a manifest named after the release tag.
-          cp "$apk" "$APPS_TAG.apk"
-          jq -n \
-            --argjson versionCode "$code" \
-            --arg versionName "$version" \
-            --arg apk "$apk" \
-            --arg sha256 "$sha" \
-            --arg commit "$commit" \
-            --arg notes "$notes" \
-            '{versionCode: $versionCode, versionName: $versionName, apk: $apk, sha256: $sha256, commit: $commit, notes: {en: $notes}}' \
-            > "$APPS_TAG.json"
-          cat "$APPS_TAG.json"
-
-          if ! gh release view "$APPS_TAG" --repo "$APPS_REPO" > /dev/null 2>&1; then
-            gh release create "$APPS_TAG" --repo "$APPS_REPO" --title "Parental Control" --notes ""
-          fi
-          # The manifest goes last, so it never names an APK that is not there yet.
-          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$apk" "$APPS_TAG.apk"
-          gh release upload "$APPS_TAG" --repo "$APPS_REPO" --clobber "$APPS_TAG.json"
-          gh release edit "$APPS_TAG" --repo "$APPS_REPO" --notes "Verzija $version, commit: $commit."
+      - name: Upload to Google Play internal testing
+        if: steps.play.outputs.upload == 'true'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PLAY_PACKAGE }}
+          releaseFiles: parental-control-${{ steps.version.outputs.name }}.aab
+          releaseName: ${{ steps.version.outputs.name }}
+          track: internal
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}

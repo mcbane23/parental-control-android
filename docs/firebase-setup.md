@@ -13,7 +13,7 @@ This is a one-time setup and takes about ten minutes. The free Spark plan is eno
 1. On the project overview, choose the Android icon (**Add app**).
 2. Android package name: `com.bane23.parentalcontrol`
 3. Debug signing certificate SHA-1: `8A:F9:1F:3E:1A:EE:6E:E6:94:D4:E1:DC:15:18:F6:6A:E2:C8:1E:1C`
-   This is the fingerprint of the debug key in `keystore/debug.keystore`. Every build is signed with it, on any computer and on GitHub, so this one value is all you need.
+   This is the fingerprint of the debug key in `keystore/debug.keystore`, which signs debug builds on any computer. The app installed from Google Play is signed with other keys; [play-release.md](play-release.md) step 6 adds their fingerprints.
 4. Register the app. Do not download `google-services.json` yet, because step 3 adds information to it.
 
 ## 3. Turn on sign-in

@@ -15,12 +15,15 @@ android {
         applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
     }
 
-    // For now every build, local or on GitHub, is signed with the debug key kept in the
-    // repository, so a new version always installs over the previous one.
+    // Debug builds, local or on GitHub, are signed with the debug key kept in the repository.
+    // Release builds are signed with the private upload key, which is never committed: the
+    // Release workflow passes it in through these environment variables (docs/play-release.md).
+    // Without them a release build is left unsigned.
+    val uploadKeystore = System.getenv("UPLOAD_KEYSTORE_FILE").orEmpty()
     signingConfigs {
         getByName("debug") {
             storeFile = rootProject.file("keystore/debug.keystore")
@@ -28,12 +31,23 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        if (uploadKeystore.isNotBlank()) {
+            create("upload") {
+                // A PKCS12 keystore uses one password for the store and the key.
+                val password = System.getenv("UPLOAD_KEYSTORE_PASSWORD").orEmpty()
+                storeFile = file(uploadKeystore)
+                storePassword = password
+                keyAlias = System.getenv("UPLOAD_KEY_ALIAS").orEmpty().ifBlank { "upload" }
+                keyPassword = password
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
     compileOptions {
@@ -70,6 +84,4 @@ dependencies {
     implementation(libs.googleid)
 
     testImplementation(libs.junit)
-    // Android only ships stubs of org.json to unit tests.
-    testImplementation(libs.json)
 }
