@@ -59,8 +59,9 @@ object UsageTracker {
 
     /**
      * Packages that are never blocked and never count towards the daily limit: this app,
-     * the home screen, the phone app and system screens. Settings is exempt for now so a
-     * phone cannot lock itself out during setup; it will be guarded by the parent PIN later.
+     * the home screen, the phone app and system screens. Settings stays reachable so that
+     * Wi-Fi and mobile data can always be switched back on; the screens in it that could
+     * remove this app are guarded by the parent PIN instead.
      */
     fun exemptPackages(context: Context): Set<String> {
         val exempt = mutableSetOf(
@@ -131,6 +132,9 @@ object UsageTracker {
             usedTodayMs = countedTotal(usage, counted),
             usageAccess = hasUsageAccess(context),
             accessibility = isAccessibilityEnabled(context),
+            locationAccess = LocationPermissions.hasAll(context),
+            deviceAdmin = AdminReceiver.isActive(context),
+            mobileData = Connectivity.read(context).mobileDataUsable,
         )
         val list = counted.map { AppUsage(it, apps.getValue(it), usage[it] ?: 0L) }
         return Snapshot(status, list, usage)

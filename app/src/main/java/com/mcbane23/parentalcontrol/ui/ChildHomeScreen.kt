@@ -1,9 +1,13 @@
 package com.mcbane23.parentalcontrol.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -27,6 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.mcbane23.parentalcontrol.child.AdminReceiver
+import com.mcbane23.parentalcontrol.child.LocationPermissions
+import com.mcbane23.parentalcontrol.child.LocationService
 import com.mcbane23.parentalcontrol.child.UsageTracker
 import com.mcbane23.parentalcontrol.data.AppUsage
 import com.mcbane23.parentalcontrol.data.ChildRules
@@ -51,7 +58,16 @@ fun ChildHomeScreen(
         resumes++
         onPauseOrDispose { }
     }
+    // Android answers permission requests through these; bumping the counter re-reads the state.
+    val askLocation = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { resumes++ }
+    val askBackground = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { resumes++ }
+
     LaunchedEffect(resumes) {
+        LocationService.start(context)
         val fresh = withContext(Dispatchers.Default) { UsageTracker.snapshot(context) }
         snapshot = fresh
         onReport(fresh.status, fresh.apps)
@@ -67,9 +83,11 @@ fun ChildHomeScreen(
     ) {
         Text("Family: ${family.name}", style = MaterialTheme.typography.headlineSmall)
 
-        if (status != null && (!status.usageAccess || !status.accessibility)) {
+        val setupDone = status == null ||
+            (status.usageAccess && status.accessibility && status.locationAccess && status.deviceAdmin)
+        if (!setupDone) {
             Text("Finish setup", style = MaterialTheme.typography.titleMedium)
-            Text("A parent should do these steps. Both are needed for limits to work.")
+            Text("A parent should do these steps. All of them are needed for the rules, location and protection to work.")
         }
         if (status != null && !status.usageAccess) {
             SetupCard(
@@ -89,15 +107,76 @@ fun ChildHomeScreen(
                 button = "Open accessibility",
                 onClick = { context.open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                 secondButton = "App info",
-                onSecondClick = {
-                    context.open(
-                        Intent(
-                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.fromParts("package", context.packageName, null),
-                        ),
-                    )
-                },
+                onSecondClick = { context.openAppInfo() },
             )
+        }
+
+        if (status != null && !status.locationAccess) {
+            if (!LocationPermissions.hasForeground(context)) {
+                SetupCard(
+                    title = "3. Location",
+                    body = "Lets parents see where this phone is. Choose \"While using the app\" and " +
+                        "\"Precise\", and allow notifications so the sharing notice can be shown.",
+                    button = "Allow location",
+                    onClick = {
+                        val permissions = buildList {
+                            add(Manifest.permission.ACCESS_FINE_LOCATION)
+                            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                        askLocation.launch(permissions.toTypedArray())
+                    },
+                    secondButton = "App info",
+                    onSecondClick = { context.openAppInfo() },
+                )
+            } else {
+                SetupCard(
+                    title = "3. Location, all the time",
+                    body = "Choose \"Allow all the time\", so location keeps working when the app is closed " +
+                        "and after the phone restarts. If nothing opens, use App info, then Permissions, then Location.",
+                    button = "Allow all the time",
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            askBackground.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        }
+                    },
+                    secondButton = "App info",
+                    onSecondClick = { context.openAppInfo() },
+                )
+            }
+        }
+
+        if (status != null && !status.deviceAdmin) {
+            SetupCard(
+                title = "4. Uninstall protection",
+                body = "Stops the app from being uninstalled from this phone. Tap Activate on the next screen. " +
+                    "If the parent PIN is asked for first, enter it and tap this button again.",
+                button = "Switch on protection",
+                onClick = { context.open(AdminReceiver.activationIntent(context)) },
+            )
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Protection", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (rules.requireMobileData) {
+                        "Mobile data must stay on. Away from Wi-Fi, apps are locked while mobile data is " +
+                            "switched off or flight mode is on."
+                    } else {
+                        "Mobile data may be switched off."
+                    },
+                )
+                Text(
+                    if (rules.pinSet) {
+                        "Removing or switching off this app needs the parent PIN."
+                    } else {
+                        "No parent PIN yet. A parent sets it from their own phone."
+                    },
+                )
+            }
         }
 
         Card(Modifier.fillMaxWidth()) {
@@ -160,6 +239,10 @@ private fun SetupCard(
             if (secondButton != null) TextButton(onClick = onSecondClick) { Text(secondButton) }
         }
     }
+}
+
+private fun Context.openAppInfo() {
+    open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
 }
 
 private fun Context.open(intent: Intent) {

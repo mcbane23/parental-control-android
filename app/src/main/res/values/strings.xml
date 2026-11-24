@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Parental Control</string>
-    <string name="accessibility_description">Lets Parental Control see which app is open on this phone, so it can apply the time limits and blocked apps a parent has set. It does not read what is typed or shown inside apps.</string>
+    <string name="accessibility_description">Lets Parental Control see which app is open on this phone, so it can apply the time limits and blocked apps a parent has set. It also notices when a settings screen about Parental Control itself is opened, such as its uninstall screen, and asks for the parent PIN there. It does not read what is typed or shown inside other apps.</string>
+    <string name="admin_description">Stops Parental Control from being uninstalled without a parent. It uses no other device admin powers.</string>
 </resources>
