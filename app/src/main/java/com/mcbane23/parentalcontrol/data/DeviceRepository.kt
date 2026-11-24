@@ -14,11 +14,14 @@ import kotlinx.coroutines.tasks.await
  * Usage reports written by a child phone and rules written by parents.
  *
  * Firestore layout, under families/{familyId}/devices/{childUid}:
- *  - (the document itself)  -> lastSeen, day, usedTodayMs, usageAccess, accessibility
+ *  - (the document itself)  -> lastSeen, day, usedTodayMs, usageAccess, accessibility,
+ *                              locationAccess, deviceAdmin, mobileData
+ *  - reports/alerts         -> events: [ { type, at } ], the latest alerts, oldest first
  *  - reports/usage          -> day, apps: { package: { label, ms } }
  *  - reports/location       -> lat, lng, accuracy, time, battery
  *  - settings/locate        -> at (a parent asking for a fresh position)
- *  - settings/rules         -> dailyLimitMinutes, apps: { package: { blocked, limitMinutes } }
+ *  - settings/rules         -> dailyLimitMinutes, apps: { package: { blocked, limitMinutes } },
+ *                              requireMobileData, pinSalt, pinHash
  *
  * Usage and rules each live in a single document so that a sync is one write, not one per app.
  */
@@ -35,6 +38,9 @@ class DeviceRepository(private val db: FirebaseFirestore) {
 
     private fun locateDoc(familyId: String, childUid: String) =
         device(familyId, childUid).collection("settings").document("locate")
+
+    private fun alertsDoc(familyId: String, childUid: String) =
+        device(familyId, childUid).collection("reports").document("alerts")
 
     private fun rulesDoc(familyId: String, childUid: String) =
         device(familyId, childUid).collection("settings").document("rules")
@@ -54,6 +60,8 @@ class DeviceRepository(private val db: FirebaseFirestore) {
                 "usageAccess" to status.usageAccess,
                 "accessibility" to status.accessibility,
                 "locationAccess" to status.locationAccess,
+                "deviceAdmin" to status.deviceAdmin,
+                "mobileData" to status.mobileData,
             ),
         )
         batch.set(
@@ -80,6 +88,8 @@ class DeviceRepository(private val db: FirebaseFirestore) {
                 accessibility = doc.getBoolean("accessibility") == true,
                 // Phones on an older app version do not report this; do not warn about them.
                 locationAccess = doc.getBoolean("locationAccess") != false,
+                deviceAdmin = doc.getBoolean("deviceAdmin") != false,
+                mobileData = doc.getBoolean("mobileData") != false,
             )
         }
 
@@ -101,6 +111,9 @@ class DeviceRepository(private val db: FirebaseFirestore) {
             val apps = doc.get("apps") as? Map<*, *> ?: emptyMap<Any, Any>()
             ChildRules(
                 dailyLimitMinutes = doc.getLong("dailyLimitMinutes")?.toInt(),
+                requireMobileData = doc.getBoolean("requireMobileData") != false,
+                pinSalt = doc.getString("pinSalt"),
+                pinHash = doc.getString("pinHash"),
                 apps = apps.mapNotNull { (pkg, value) ->
                     val fields = value as? Map<*, *> ?: return@mapNotNull null
                     pkg.toString() to AppRule(
@@ -148,6 +161,41 @@ class DeviceRepository(private val db: FirebaseFirestore) {
         locateDoc(familyId, childUid).snapshots { doc ->
             doc.getTimestamp("at", DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)?.toDate()?.time ?: 0L
         }
+
+    /** Called on the child phone with its whole alert list. Queued by Firestore when offline. */
+    fun reportAlerts(familyId: String, childUid: String, alerts: List<Alert>) {
+        alertsDoc(familyId, childUid).set(
+            mapOf("events" to alerts.map { mapOf("type" to it.type.name, "at" to it.timeMillis) }),
+        )
+    }
+
+    /** The child phone's latest alerts, newest first. */
+    fun alerts(familyId: String, childUid: String): Flow<List<Alert>> =
+        alertsDoc(familyId, childUid).snapshots { doc ->
+            val events = doc.get("events") as? List<*> ?: emptyList<Any>()
+            events.mapNotNull { value ->
+                val fields = value as? Map<*, *> ?: return@mapNotNull null
+                val type = AlertType.entries.firstOrNull { it.name == fields["type"] }
+                val time = (fields["at"] as? Number)?.toLong()
+                if (type != null && time != null) Alert(type, time) else null
+            }.sortedByDescending { it.timeMillis }
+        }
+
+    suspend fun setRequireMobileData(familyId: String, childUid: String, required: Boolean) {
+        rulesDoc(familyId, childUid)
+            .set(mapOf("requireMobileData" to required), SetOptions.merge())
+            .await()
+    }
+
+    /** Stores the parent PIN as a salted hash, or removes it when [pin] is null. */
+    suspend fun setPin(familyId: String, childUid: String, pin: String?) {
+        val salt = pin?.let { ParentPin.newSalt() }
+        val fields = mapOf(
+            "pinSalt" to (salt ?: FieldValue.delete()),
+            "pinHash" to (if (pin != null && salt != null) ParentPin.hash(pin, salt) else FieldValue.delete()),
+        )
+        rulesDoc(familyId, childUid).set(fields, SetOptions.merge()).await()
+    }
 
     suspend fun setDailyLimit(familyId: String, childUid: String, minutes: Int?) {
         rulesDoc(familyId, childUid)

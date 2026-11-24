@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.mcbane23.parentalcontrol.data.Alert
 import com.mcbane23.parentalcontrol.data.AppRule
 import com.mcbane23.parentalcontrol.data.AppUsage
 import com.mcbane23.parentalcontrol.data.ChildLocation
@@ -49,6 +50,9 @@ fun ChildDetailScreen(
     location: ChildLocation?,
     busy: Boolean,
     onRefreshLocation: () -> Unit,
+    alerts: List<Alert>,
+    onSetRequireMobileData: (Boolean) -> Unit,
+    onSetParentPin: (String?) -> Unit,
     onSetDailyLimit: (Int?) -> Unit,
     onSetAppBlocked: (String, Boolean) -> Unit,
     onSetAppLimit: (String, Int?) -> Unit,
@@ -67,6 +71,10 @@ fun ChildDetailScreen(
         }
         item { StatusCard(status) }
         item { LocationCard(child.name, location, canManage, busy, onRefreshLocation) }
+        item { ProtectionCard(rules, canManage, busy, onSetRequireMobileData, onSetParentPin) }
+        if (alerts.isNotEmpty()) {
+            item { AlertsCard(alerts) }
+        }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -118,6 +126,8 @@ private fun StatusCard(status: DeviceStatus?) {
         !status.usageAccess -> "Usage access is switched off on the child's phone, so time is not being counted."
         !status.accessibility -> "The accessibility permission is switched off on the child's phone, so limits and blocks are not applied."
         !status.locationAccess -> "Location is not set to \"Allow all the time\" on the child's phone, so its position may be missing or old."
+        !status.deviceAdmin -> "Uninstall protection is switched off on the child's phone, so the app can be removed there."
+        !status.mobileData -> "Mobile data or flight mode cuts the child's phone off when it leaves Wi-Fi."
         else -> null
     }
     Card(

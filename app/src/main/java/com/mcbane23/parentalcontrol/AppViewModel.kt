@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mcbane23.parentalcontrol.data.Alert
 import com.mcbane23.parentalcontrol.data.AppRule
 import com.mcbane23.parentalcontrol.data.AppUsage
 import com.mcbane23.parentalcontrol.data.ChildLocation
@@ -17,6 +18,7 @@ import com.mcbane23.parentalcontrol.data.Member
 import com.mcbane23.parentalcontrol.data.PairingCode
 import com.mcbane23.parentalcontrol.data.Role
 import com.mcbane23.parentalcontrol.data.UserProfile
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface Screen {
     data object Loading : Screen
@@ -50,6 +53,7 @@ data class UiState(
     val childApps: List<AppUsage> = emptyList(),
     val childRules: ChildRules = ChildRules(),
     val childLocation: ChildLocation? = null,
+    val childAlerts: List<Alert> = emptyList(),
 )
 
 class AppViewModel(
@@ -120,6 +124,19 @@ class AppViewModel(
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         val rule = _state.value.childRules.apps[packageName] ?: AppRule()
         requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(limitMinutes = minutes))
+    }
+
+    fun setRequireMobileData(required: Boolean) = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        requireDevices().setRequireMobileData(detail.family.id, detail.child.uid, required)
+    }
+
+    /** Sets the PIN a parent types on the child phone, or removes it with null. */
+    fun setParentPin(pin: String?) = launchAction {
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
+        val devices = requireDevices()
+        // Hashing the PIN takes a moment; keep it off the main thread.
+        withContext(Dispatchers.Default) { devices.setPin(detail.family.id, detail.child.uid, pin) }
     }
 
     fun refreshLocation() = launchAction {
@@ -236,6 +253,11 @@ class AppViewModel(
                         .collect { location -> _state.update { it.copy(childLocation = location) } }
                 }
                 launch {
+                    devices.alerts(familyId, childUid)
+                        .catch { e -> _state.update { it.copy(error = e.message) } }
+                        .collect { alerts -> _state.update { it.copy(childAlerts = alerts) } }
+                }
+                launch {
                     devices.apps(familyId, childUid)
                         .catch { e -> _state.update { it.copy(error = e.message) } }
                         .collect { apps -> _state.update { it.copy(childApps = apps) } }
@@ -247,7 +269,7 @@ class AppViewModel(
     private fun stopWatchingChild() {
         childJob?.cancel()
         childJob = null
-        _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules(), childLocation = null) }
+        _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules(), childLocation = null, childAlerts = emptyList()) }
     }
 
     private fun requireDevices(): DeviceRepository = checkNotNull(devices) { "Firebase is not set up." }

@@ -21,7 +21,26 @@ Step 3 has started:
 - The child phone shares its location from a foreground service, and parents see it on an
   OpenStreetMap map with a refresh button
 
-Keeping mobile data on and tamper protection come next.
+- With "Keep mobile data on", the child phone locks its apps while mobile data is switched
+  off or flight mode is on. It never does so on Wi-Fi, on a device without a SIM, or when
+  there is simply no signal. Phone calls and Settings stay reachable.
+- Uninstall protection: the app is a device admin app (with no admin powers), so Android
+  refuses to uninstall it. The accessibility service closes the settings screens about the
+  app itself (app info, uninstall, device admin, accessibility, permissions) and asks for a
+  parent PIN, which a parent sets from the dashboard. The right PIN opens those screens for
+  5 minutes.
+- The child phone records alerts (cut off, protection switched off, wrong PIN) and parents
+  see them on the child's page.
+
+Limits of the protection, since the phone is not factory reset or set up over USB: starting
+the phone in safe mode stops every installed app, and a factory reset removes the app. The
+parents notice both because the phone stops reporting.
+
+### Google Play declarations
+
+When the app goes to review, the accessibility declaration has to say that the service is
+used to block apps and to keep a child from removing the app, on behalf of a parent. Google
+Play allows this for parental control apps. The device admin use needs the same explanation.
 
 ## Building
 

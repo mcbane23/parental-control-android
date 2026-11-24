@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.mcbane23.parentalcontrol.child.AdminReceiver
 import com.mcbane23.parentalcontrol.child.LocationPermissions
 import com.mcbane23.parentalcontrol.child.LocationService
 import com.mcbane23.parentalcontrol.child.UsageTracker
@@ -82,9 +83,11 @@ fun ChildHomeScreen(
     ) {
         Text("Family: ${family.name}", style = MaterialTheme.typography.headlineSmall)
 
-        if (status != null && (!status.usageAccess || !status.accessibility || !status.locationAccess)) {
+        val setupDone = status == null ||
+            (status.usageAccess && status.accessibility && status.locationAccess && status.deviceAdmin)
+        if (!setupDone) {
             Text("Finish setup", style = MaterialTheme.typography.titleMedium)
-            Text("A parent should do these steps. All of them are needed for the rules and location to work.")
+            Text("A parent should do these steps. All of them are needed for the rules, location and protection to work.")
         }
         if (status != null && !status.usageAccess) {
             SetupCard(
@@ -141,6 +144,37 @@ fun ChildHomeScreen(
                     },
                     secondButton = "App info",
                     onSecondClick = { context.openAppInfo() },
+                )
+            }
+        }
+
+        if (status != null && !status.deviceAdmin) {
+            SetupCard(
+                title = "4. Uninstall protection",
+                body = "Stops the app from being uninstalled from this phone. Tap Activate on the next screen. " +
+                    "If the parent PIN is asked for first, enter it and tap this button again.",
+                button = "Switch on protection",
+                onClick = { context.open(AdminReceiver.activationIntent(context)) },
+            )
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Protection", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (rules.requireMobileData) {
+                        "Mobile data must stay on. Away from Wi-Fi, apps are locked while mobile data is " +
+                            "switched off or flight mode is on."
+                    } else {
+                        "Mobile data may be switched off."
+                    },
+                )
+                Text(
+                    if (rules.pinSet) {
+                        "Removing or switching off this app needs the parent PIN."
+                    } else {
+                        "No parent PIN yet. A parent sets it from their own phone."
+                    },
                 )
             }
         }

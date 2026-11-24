@@ -11,6 +11,10 @@ data class DeviceStatus(
     val accessibility: Boolean,
     /** Location permission, including "Allow all the time". */
     val locationAccess: Boolean,
+    /** Uninstall protection: the app is an active device admin app. */
+    val deviceAdmin: Boolean,
+    /** False when mobile data is switched off or flight mode is on. */
+    val mobileData: Boolean,
 )
 
 data class ChildLocation(
@@ -36,9 +40,16 @@ data class AppRule(
 data class ChildRules(
     val dailyLimitMinutes: Int? = null,
     val apps: Map<String, AppRule> = emptyMap(),
-)
+    /** Lock apps when the child switches mobile data off away from Wi-Fi. */
+    val requireMobileData: Boolean = true,
+    /** Salt and hash of the parent PIN, see [ParentPin]. Null until a parent sets one. */
+    val pinSalt: String? = null,
+    val pinHash: String? = null,
+) {
+    val pinSet: Boolean get() = !pinSalt.isNullOrEmpty() && !pinHash.isNullOrEmpty()
+}
 
-enum class BlockReason { BLOCKED, APP_LIMIT, DAILY_LIMIT }
+enum class BlockReason { BLOCKED, APP_LIMIT, DAILY_LIMIT, MOBILE_DATA_OFF }
 
 object RuleEngine {
     /**
