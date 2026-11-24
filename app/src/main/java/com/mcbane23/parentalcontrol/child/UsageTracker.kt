@@ -73,10 +73,6 @@ object UsageTracker {
             "com.samsung.android.incallui",
             "com.google.android.permissioncontroller",
             "com.android.permissioncontroller",
-            // The install screen of an in-app update must stay reachable when time is up.
-            "com.google.android.packageinstaller",
-            "com.android.packageinstaller",
-            "com.samsung.android.packageinstaller",
         )
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         context.packageManager.queryIntentActivities(home, 0)

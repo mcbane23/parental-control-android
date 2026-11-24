@@ -184,7 +184,7 @@ fun ChildHomeScreen(
             }
         }
 
-        UpdateCard()
+        AppVersion()
     }
 }
 

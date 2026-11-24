@@ -33,26 +33,22 @@ Requires JDK 17 and Android SDK 35. Minimum Android version is 9 (API 28).
 ## Releases
 
 The version lives in `app/build.gradle.kts` (`versionName` and `versionCode`). When a change
-to `versionName` reaches `main`, GitHub builds the app and publishes a release named
-`v<versionName>` with the APK attached. Raise `versionCode` at the same time, or Android
-will refuse to install the new APK over the old one.
+to `versionName` reaches `main`, GitHub builds the app, signs it with the private upload key
+and publishes it twice:
 
-The same run copies the APK into the `parental-control` release of
-[mcbane23/apps](https://github.com/mcbane23/apps/releases/tag/parental-control), next to
-`parental-control.json`, which names the newest version. For that the repository needs the
-secret `APPS_REPO_TOKEN`: a fine-grained personal access token limited to `mcbane23/apps`
-with "Contents: Read and write". If the copy fails, fix the cause and run the Release
-workflow by hand from the Actions tab; it only fills in what is missing.
+- as a GitHub release named `v<versionName>`, with the APK and the AAB attached
+- to the internal testing track of Google Play, where the family phones get it as a normal
+  Play update
 
-## Updating from inside the app
+Raise `versionCode` at the same time, because Google Play accepts each number only once.
 
-The card "App version" on the welcome and home screens checks that manifest when the app
-opens and on "Check for update". "Update now" downloads the APK, checks its SHA-256 against
-the manifest and hands it to the Android installer. The first time, Android asks to allow
-installs from this app.
+[docs/play-release.md](docs/play-release.md) describes the one-time setup: the upload key,
+the GitHub secrets, the app in Play Console and the testers. The phones install the app from
+Play, because Play Protect blocks installing this APK from a file.
 
-All builds are signed with the debug key in `keystore/debug.keystore`. That is fine for
-family use. A Play Store release will need a private key that is not in the repository.
+Debug builds are still signed with the debug key in `keystore/debug.keystore`, so a local
+build works without any secret. A debug build and a Play build cannot replace each other on
+a phone, because their signatures differ.
 
 The test build that runs on pull requests uploads nothing to GitHub.
 
