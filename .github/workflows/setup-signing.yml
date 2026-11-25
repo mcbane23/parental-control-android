@@ -1,0 +1,80 @@
+name: One-time signing setup
+
+# Does steps 1 to 3 of docs/play-release.md and is deleted again once it has worked:
+#   1. creates a new private upload key (PKCS12, alias "upload", random password)
+#   2. stores it as the repository secrets UPLOAD_KEYSTORE_BASE64 and UPLOAD_KEYSTORE_PASSWORD
+#   3. starts the Release workflow, which builds the signed APK and AAB
+# The key and its password exist only inside this run and in the encrypted secrets. Nothing is
+# printed or uploaded, because this repository is public. Should the key ever be lost, Play
+# Console can reset the upload key (App integrity > Play app signing > Request upload key reset).
+#
+# GitHub's own token cannot write secrets, so this needs the repository secret SETUP_TOKEN:
+# a fine-grained personal access token for this repository only, with the permission
+# "Secrets: Read and write", that expires tomorrow.
+#
+# It refuses to replace an upload key that is already stored, and stops working after
+# 26 November 2026.
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write # to start the Release workflow
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4 # for keytool
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Check the date and the token
+        env:
+          GH_TOKEN: ${{ secrets.SETUP_TOKEN }}
+        run: |
+          if [ "$(date -u +%s)" -gt "$(date -u -d 2026-11-26T23:59:59Z +%s)" ]; then
+            echo "::error::This one-time workflow expired on 26 November 2026."
+            exit 1
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The secret SETUP_TOKEN is not set. Create a fine-grained token for this repository with 'Secrets: Read and write', add it as SETUP_TOKEN and run this workflow again."
+            exit 1
+          fi
+          existing=$(gh secret list --repo "$GITHUB_REPOSITORY" --json name --jq '.[].name')
+          if echo "$existing" | grep -qx UPLOAD_KEYSTORE_BASE64; then
+            echo "::error::UPLOAD_KEYSTORE_BASE64 already exists. This workflow does not replace an upload key, because Google Play may already know it. Delete the secret first if you really want a new key."
+            exit 1
+          fi
+
+      - name: Create the upload key and store it as secrets
+        env:
+          GH_TOKEN: ${{ secrets.SETUP_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          password=$(openssl rand -base64 30 | tr -d '/+=' | cut -c 1-32)
+          echo "::add-mask::$password"
+          keystore="$RUNNER_TEMP/upload.jks"
+          keytool -genkeypair -noprompt \
+            -keystore "$keystore" -storetype PKCS12 \
+            -storepass "$password" -keypass "$password" \
+            -alias upload -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Parental Control, O=mcbane23" > /dev/null 2>&1
+
+          # Fingerprints are public information. Step 6 of docs/play-release.md needs the SHA-1.
+          echo "Upload key certificate fingerprints:"
+          keytool -list -v -keystore "$keystore" -storepass "$password" -alias upload \
+            | grep -E '^\s*SHA(1|256):'
+
+          base64 -w 0 "$keystore" | gh secret set UPLOAD_KEYSTORE_BASE64 --repo "$GITHUB_REPOSITORY"
+          printf '%s' "$password" | gh secret set UPLOAD_KEYSTORE_PASSWORD --repo "$GITHUB_REPOSITORY"
+          rm -f "$keystore"
+          echo "Stored UPLOAD_KEYSTORE_BASE64 and UPLOAD_KEYSTORE_PASSWORD."
+
+      - name: Start the Release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main
+          echo "Release started. Follow it under Actions > Release."
