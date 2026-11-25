@@ -44,6 +44,9 @@ fun ParentHomeScreen(
     members: List<Member>,
     busy: Boolean,
     pairingCode: PairingCode?,
+    /** Showing the made-up demo family. */
+    demo: Boolean,
+    onDemo: () -> Unit,
     onAddChild: () -> Unit,
     onInviteParent: () -> Unit,
     onDismissCode: () -> Unit,
@@ -77,6 +80,13 @@ fun ParentHomeScreen(
                             "A parent with full control can add one."
                         },
                     )
+                }
+                if (!demo) {
+                    item {
+                        TextButton(onClick = onDemo, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            Text("See it with a demo child")
+                        }
+                    }
                 }
             }
             items(children, key = { it.uid }) { child ->
@@ -183,7 +193,7 @@ fun ParentHomeScreen(
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Sign out")
+                        Text(if (demo) "Exit demo" else "Sign out")
                     }
                 }
             }
@@ -223,7 +233,11 @@ fun ParentHomeScreen(
                         )
                     }
                     Text(
-                        "The code works once and expires in ${PairingCodes.VALID_MINUTES} minutes.",
+                        if (demo) {
+                            "This is a sample code from the demo. It does not pair a phone."
+                        } else {
+                            "The code works once and expires in ${PairingCodes.VALID_MINUTES} minutes."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

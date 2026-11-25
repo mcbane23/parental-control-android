@@ -9,6 +9,8 @@ import com.mcbane23.parentalcontrol.data.AppRule
 import com.mcbane23.parentalcontrol.data.AppUsage
 import com.mcbane23.parentalcontrol.data.ChildLocation
 import com.mcbane23.parentalcontrol.data.ChildRules
+import com.mcbane23.parentalcontrol.data.Demo
+import com.mcbane23.parentalcontrol.data.DemoChild
 import com.mcbane23.parentalcontrol.data.DeviceRepository
 import com.mcbane23.parentalcontrol.data.DeviceStatus
 import com.mcbane23.parentalcontrol.data.Family
@@ -16,6 +18,7 @@ import com.mcbane23.parentalcontrol.data.FamilyRepository
 import com.mcbane23.parentalcontrol.data.GoogleSignIn
 import com.mcbane23.parentalcontrol.data.Member
 import com.mcbane23.parentalcontrol.data.PairingCode
+import com.mcbane23.parentalcontrol.data.PairingCodes
 import com.mcbane23.parentalcontrol.data.Role
 import com.mcbane23.parentalcontrol.data.UserProfile
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +30,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 
 sealed interface Screen {
     data object Loading : Screen
@@ -46,6 +50,8 @@ data class UiState(
     val screen: Screen = Screen.Loading,
     val busy: Boolean = false,
     val error: String? = null,
+    /** Showing the made-up family from [Demo]. Nothing is read from or written to Firebase. */
+    val demo: Boolean = false,
     val members: List<Member> = emptyList(),
     val pairingCode: PairingCode? = null,
     /** On a parent's phone: the child being looked at. On a child's phone: this phone. */
@@ -65,6 +71,9 @@ class AppViewModel(
 
     private var membersJob: Job? = null
     private var childJob: Job? = null
+
+    /** The made-up children while the demo runs, including the changes made to them so far. */
+    private var demoChildren: List<DemoChild> = emptyList()
 
     init {
         if (repo == null) {
@@ -90,7 +99,35 @@ class AppViewModel(
         _state.update { it.copy(screen = Screen.ChildPairing, error = null) }
     }
 
+    /**
+     * Opens the parent screens with a made-up family, so they can be explored without a
+     * paired child phone. Works signed in or not, and leaves the real account untouched.
+     */
+    fun startDemo() {
+        stopWatchingMembers()
+        stopWatchingChild()
+        demoChildren = Demo.children(System.currentTimeMillis(), LocalDate.now().toString())
+        _state.value = UiState(
+            screen = Screen.ParentHome(Demo.family, Demo.PARENT_UID),
+            demo = true,
+            members = demoChildren.map { it.member } + Demo.parents,
+        )
+    }
+
+    /** Leaves the demo and goes back to wherever this phone really is: signed in or not. */
+    fun exitDemo() {
+        if (!_state.value.demo) return
+        demoChildren = emptyList()
+        if (repo == null) {
+            _state.value = UiState(screen = Screen.FirebaseMissing)
+            return
+        }
+        _state.value = UiState(screen = Screen.Loading)
+        launchAction { routeForCurrentUser() }
+    }
+
     fun backToWelcome() {
+        if (_state.value.demo) return exitDemo()
         requireRepo().signOut()
         stopWatchingMembers()
         stopWatchingChild()
@@ -100,6 +137,10 @@ class AppViewModel(
     fun openChild(child: Member) {
         val home = _state.value.screen as? Screen.ParentHome ?: return
         _state.update { it.copy(screen = Screen.ChildDetail(home.family, home.myUid, child)) }
+        if (_state.value.demo) {
+            demoChildren.firstOrNull { it.member.uid == child.uid }?.let(::showDemoChild)
+            return
+        }
         watchChild(home.family.id, child.uid, withReports = true)
     }
 
@@ -110,6 +151,7 @@ class AppViewModel(
     }
 
     fun setDailyLimit(minutes: Int?) = launchAction {
+        if (updateDemoChild { it.copy(rules = it.rules.copy(dailyLimitMinutes = minutes)) }) return@launchAction
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         requireDevices().setDailyLimit(detail.family.id, detail.child.uid, minutes)
     }
@@ -117,22 +159,30 @@ class AppViewModel(
     fun setAppBlocked(packageName: String, blocked: Boolean) = launchAction {
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         val rule = _state.value.childRules.apps[packageName] ?: AppRule()
+        if (updateDemoChild { it.copy(rules = Demo.withAppRule(it.rules, packageName, rule.copy(blocked = blocked))) }) {
+            return@launchAction
+        }
         requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(blocked = blocked))
     }
 
     fun setAppLimit(packageName: String, minutes: Int?) = launchAction {
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         val rule = _state.value.childRules.apps[packageName] ?: AppRule()
+        if (updateDemoChild { it.copy(rules = Demo.withAppRule(it.rules, packageName, rule.copy(limitMinutes = minutes))) }) {
+            return@launchAction
+        }
         requireDevices().setAppRule(detail.family.id, detail.child.uid, packageName, rule.copy(limitMinutes = minutes))
     }
 
     fun setRequireMobileData(required: Boolean) = launchAction {
+        if (updateDemoChild { it.copy(rules = it.rules.copy(requireMobileData = required)) }) return@launchAction
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         requireDevices().setRequireMobileData(detail.family.id, detail.child.uid, required)
     }
 
     /** Sets the PIN a parent types on the child phone, or removes it with null. */
     fun setParentPin(pin: String?) = launchAction {
+        if (updateDemoChild { it.copy(rules = Demo.withPin(it.rules, set = pin != null)) }) return@launchAction
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         val devices = requireDevices()
         // Hashing the PIN takes a moment; keep it off the main thread.
@@ -140,6 +190,8 @@ class AppViewModel(
     }
 
     fun refreshLocation() = launchAction {
+        val now = System.currentTimeMillis()
+        if (updateDemoChild { it.copy(location = Demo.refreshed(it.location, now)) }) return@launchAction
         val detail = _state.value.screen as? Screen.ChildDetail ?: return@launchAction
         requireDevices().requestLocation(detail.family.id, detail.child.uid)
     }
@@ -170,6 +222,12 @@ class AppViewModel(
 
     fun createPairingCode(role: Role) = launchAction {
         val home = _state.value.screen as? Screen.ParentHome ?: return@launchAction
+        if (_state.value.demo) {
+            // A sample code that was never stored anywhere, so it cannot pair a phone.
+            val expires = System.currentTimeMillis() + PairingCodes.VALID_MINUTES * 60_000
+            _state.update { it.copy(pairingCode = PairingCode(PairingCodes.generate(), role, expires)) }
+            return@launchAction
+        }
         val code = requireRepo().createPairingCode(home.family, role)
         _state.update { it.copy(pairingCode = code) }
     }
@@ -180,6 +238,12 @@ class AppViewModel(
 
     fun setFullControl(member: Member, fullControl: Boolean) = launchAction {
         val home = _state.value.screen as? Screen.ParentHome ?: return@launchAction
+        if (_state.value.demo) {
+            _state.update { state ->
+                state.copy(members = state.members.map { if (it.uid == member.uid) it.copy(fullControl = fullControl) else it })
+            }
+            return@launchAction
+        }
         requireRepo().setFullControl(home.family.id, member.uid, fullControl)
     }
 
@@ -270,6 +334,30 @@ class AppViewModel(
         childJob?.cancel()
         childJob = null
         _state.update { it.copy(childStatus = null, childApps = emptyList(), childRules = ChildRules(), childLocation = null, childAlerts = emptyList()) }
+    }
+
+    /**
+     * In the demo, applies [change] to the child on screen and keeps it for the rest of the
+     * demo. Returns false outside the demo, where the caller goes on to Firebase.
+     */
+    private fun updateDemoChild(change: (DemoChild) -> DemoChild): Boolean {
+        if (!_state.value.demo) return false
+        val detail = _state.value.screen as? Screen.ChildDetail ?: return true
+        demoChildren = demoChildren.map { if (it.member.uid == detail.child.uid) change(it) else it }
+        demoChildren.firstOrNull { it.member.uid == detail.child.uid }?.let(::showDemoChild)
+        return true
+    }
+
+    private fun showDemoChild(child: DemoChild) {
+        _state.update {
+            it.copy(
+                childStatus = child.status,
+                childApps = child.apps,
+                childRules = child.rules,
+                childLocation = child.location,
+                childAlerts = child.alerts,
+            )
+        }
     }
 
     private fun requireDevices(): DeviceRepository = checkNotNull(devices) { "Firebase is not set up." }
