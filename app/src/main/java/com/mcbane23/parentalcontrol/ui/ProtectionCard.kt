@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,16 +44,17 @@ fun ProtectionCard(
 ) {
     var editingPin by remember { mutableStateOf(false) }
 
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Protection", style = MaterialTheme.typography.titleMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    AppCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CardHeader(Icons.Filled.Lock, "Protection")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text("Keep mobile data on")
+                    Text("Keep mobile data on", style = MaterialTheme.typography.bodyLarge)
                     Text(
                         "Locks apps while mobile data is switched off or flight mode is on. " +
                             "Never on Wi-Fi. Phone calls still work.",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Switch(
@@ -59,7 +63,11 @@ fun ProtectionCard(
                     enabled = canManage && !busy,
                 )
             }
-            Text("Parent PIN")
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Parent PIN", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                StatusChip(if (rules.pinSet) "Set" else "Not set", if (rules.pinSet) Tone.Good else Tone.Attention)
+            }
             Text(
                 if (rules.pinSet) {
                     "Set. It is asked for on the child's phone before the screens that can uninstall " +
@@ -68,10 +76,11 @@ fun ProtectionCard(
                     "Not set. Until there is a PIN, those screens on the child's phone are not guarded."
                 },
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (canManage) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { editingPin = true }, enabled = !busy) {
+                    OutlinedButton(onClick = { editingPin = true }, enabled = !busy, shape = MaterialTheme.shapes.small) {
                         Text(if (rules.pinSet) "Change PIN" else "Set PIN")
                     }
                     if (rules.pinSet) {
@@ -119,16 +128,23 @@ private fun PinDialog(onDismiss: () -> Unit, onSet: (String) -> Unit) {
 /** What the child phone reported about tampering and being cut off, newest first. */
 @Composable
 fun AlertsCard(alerts: List<Alert>) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Alerts", style = MaterialTheme.typography.titleMedium)
+    AppCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CardHeader(Icons.Filled.Notifications, "Alerts")
             alerts.take(MAX_SHOWN).forEach { alert ->
                 val time = DateUtils.getRelativeTimeSpanString(
                     alert.timeMillis,
                     System.currentTimeMillis(),
                     DateUtils.MINUTE_IN_MILLIS,
                 )
-                Text("$time: ${describe(alert.type)}", style = MaterialTheme.typography.bodySmall)
+                Column {
+                    Text(describe(alert.type), style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        time.toString(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

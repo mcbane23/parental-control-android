@@ -5,15 +5,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -61,50 +63,68 @@ fun ChildDetailScreen(
     BackHandler(onBack = onBack)
     var editing by remember { mutableStateOf<LimitTarget?>(null) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item {
-            TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) { Text("Back") }
-            Text(child.name, style = MaterialTheme.typography.headlineMedium)
-        }
-        item { StatusCard(status) }
-        item { LocationCard(child.name, location, canManage, busy, onRefreshLocation) }
-        item { ProtectionCard(rules, canManage, busy, onSetRequireMobileData, onSetParentPin) }
-        if (alerts.isNotEmpty()) {
-            item { AlertsCard(alerts) }
-        }
-        item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Today", style = MaterialTheme.typography.titleMedium)
-                    val used = formatDuration(status?.usedTodayMs ?: 0L)
-                    val limit = rules.dailyLimitMinutes
-                    Text(if (limit != null) "$used of ${formatMinutes(limit)}" else "$used, no daily limit")
-                    if (canManage) {
-                        OutlinedButton(
-                            onClick = { editing = LimitTarget("Daily limit", null, limit) },
-                        ) { Text(if (limit != null) "Change daily limit" else "Set daily limit") }
+    AdaptivePanes(
+        header = { AppHeader(title = child.name, onBack = onBack) },
+        first = {
+            item { StatusCard(status) }
+            item { LocationCard(child.name, location, canManage, busy, onRefreshLocation) }
+            item { ProtectionCard(rules, canManage, busy, onSetRequireMobileData, onSetParentPin) }
+            if (alerts.isNotEmpty()) {
+                item { AlertsCard(alerts) }
+            }
+        },
+        second = {
+            item {
+                val usedMs = status?.usedTodayMs ?: 0L
+                val limit = rules.dailyLimitMinutes
+                AppCard {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CardHeader(Icons.Filled.DateRange, "Today")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            if (limit != null) UsageRing(usedMs / (limit * 60_000f))
+                            Column(Modifier.weight(1f)) {
+                                Text(formatDuration(usedMs), style = MaterialTheme.typography.headlineSmall)
+                                Text(
+                                    if (limit != null) "of ${formatMinutes(limit)} daily limit" else "No daily limit",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (canManage) {
+                            OutlinedButton(
+                                onClick = { editing = LimitTarget("Daily limit", null, limit) },
+                                shape = MaterialTheme.shapes.small,
+                            ) { Text(if (limit != null) "Change daily limit" else "Set daily limit") }
+                        }
                     }
                 }
             }
-        }
-        item { Text("Apps", style = MaterialTheme.typography.titleMedium) }
-        if (apps.isEmpty()) {
-            item { Text("The app list appears after the child's phone has finished setup.") }
-        }
-        items(apps, key = { it.packageName }) { app ->
-            val rule = rules.apps[app.packageName] ?: AppRule()
-            AppRow(
-                app = app,
-                rule = rule,
-                canManage = canManage,
-                onBlocked = { onSetAppBlocked(app.packageName, it) },
-                onEditLimit = { editing = LimitTarget(app.label, app.packageName, rule.limitMinutes) },
-            )
-        }
-    }
+            item { SectionHeader("Apps") }
+            if (apps.isEmpty()) {
+                item {
+                    EmptyState(
+                        icon = Icons.Filled.Menu,
+                        title = "No apps yet",
+                        body = "The app list appears after the child's phone has finished setup.",
+                    )
+                }
+            }
+            items(apps, key = { it.packageName }) { app ->
+                val rule = rules.apps[app.packageName] ?: AppRule()
+                AppRow(
+                    app = app,
+                    rule = rule,
+                    canManage = canManage,
+                    onBlocked = { onSetAppBlocked(app.packageName, it) },
+                    onEditLimit = { editing = LimitTarget(app.label, app.packageName, rule.limitMinutes) },
+                )
+            }
+        },
+    )
 
     editing?.let { target ->
         LimitDialog(
@@ -130,23 +150,43 @@ private fun StatusCard(status: DeviceStatus?) {
         !status.mobileData -> "Mobile data or flight mode cuts the child's phone off when it leaves Wi-Fi."
         else -> null
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = if (problem != null) {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    val lastReport = if (status != null && status.lastSeenMillis > 0) {
+        val ago = DateUtils.getRelativeTimeSpanString(
+            status.lastSeenMillis,
+            System.currentTimeMillis(),
+            DateUtils.MINUTE_IN_MILLIS,
+        )
+        "Last report: $ago"
+    } else {
+        null
+    }
+    AppCard(
+        containerColor = if (problem != null) {
+            MaterialTheme.colorScheme.errorContainer
         } else {
-            CardDefaults.cardColors()
+            MaterialTheme.colorScheme.surfaceContainerLow
         },
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (problem != null) Text(problem)
-            if (status != null && status.lastSeenMillis > 0) {
-                val ago = DateUtils.getRelativeTimeSpanString(
-                    status.lastSeenMillis,
-                    System.currentTimeMillis(),
-                    DateUtils.MINUTE_IN_MILLIS,
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (problem != null) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
                 )
-                Text("Last report: $ago")
+            } else {
+                IconBubble(Icons.Filled.CheckCircle, tone = Tone.Good, size = 36.dp)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    problem ?: "Rules and protection are working",
+                    style = if (problem != null) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.titleMedium,
+                )
+                if (lastReport != null) Text(lastReport, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -160,22 +200,29 @@ private fun AppRow(
     onBlocked: (Boolean) -> Unit,
     onEditLimit: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    val used = if (app.usedTodayMs > 0) "${formatDuration(app.usedTodayMs)} today" else "Not used today"
+    val limit = rule.limitMinutes
+    AppCard {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 10.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(Modifier.weight(1f)) {
+            Avatar(app.label, size = 36.dp, tone = if (rule.blocked) Tone.Attention else Tone.Accent)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(app.label, style = MaterialTheme.typography.titleMedium)
-                val used = if (app.usedTodayMs > 0) "${formatDuration(app.usedTodayMs)} today" else "Not used today"
                 Text(
                     when {
                         rule.blocked -> "$used. Blocked"
-                        rule.limitMinutes != null -> "$used. Limit ${formatMinutes(rule.limitMinutes)}"
+                        limit != null -> "$used. Limit ${formatMinutes(limit)}"
                         else -> used
                     },
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (limit != null && !rule.blocked) {
+                    UsageBar(app.usedTodayMs / (limit * 60_000f), Modifier.padding(top = 4.dp))
+                }
             }
             if (canManage) {
                 TextButton(onClick = onEditLimit) { Text("Limit") }
