@@ -32,6 +32,13 @@ Step 3 has started:
 - The child phone records alerts (cut off, protection switched off, wrong PIN) and parents
   see them on the child's page.
 
+### Demo
+
+"Try the parent demo" on the first screen opens the parent dashboard with a made-up family:
+two children with usage, limits, a location and alerts. Every switch and button works, but
+the demo lives in memory only (`data/Demo.kt`). It never reads from or writes to Firebase and
+needs no sign-in. A bar at the bottom shows that the demo is running and has "Exit demo".
+
 Limits of the protection, since the phone is not factory reset or set up over USB: starting
 the phone in safe mode stops every installed app, and a factory reset removes the app. The
 parents notice both because the phone stops reporting.

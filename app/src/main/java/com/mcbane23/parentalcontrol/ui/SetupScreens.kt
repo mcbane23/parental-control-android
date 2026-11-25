@@ -87,7 +87,7 @@ fun FirebaseMissingScreen() {
 }
 
 @Composable
-fun WelcomeScreen(busy: Boolean, onParent: () -> Unit, onChild: () -> Unit) {
+fun WelcomeScreen(busy: Boolean, onParent: () -> Unit, onChild: () -> Unit, onDemo: () -> Unit) {
     ScreenColumn {
         ScreenIntro(Icons.Filled.Lock, "Parental Control", "Who uses this phone?")
         Spacer(Modifier.height(8.dp))
@@ -105,7 +105,7 @@ fun WelcomeScreen(busy: Boolean, onParent: () -> Unit, onChild: () -> Unit) {
             enabled = !busy,
             onClick = onChild,
         )
-        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = onDemo, enabled = !busy) { Text("Try the parent demo") }
         AppVersion()
     }
 }
@@ -143,6 +143,7 @@ fun ParentSetupScreen(
     suggestedName: String,
     onCreateFamily: (familyName: String, parentName: String) -> Unit,
     onJoinFamily: (code: String, parentName: String) -> Unit,
+    onDemo: () -> Unit,
     onBack: () -> Unit,
 ) {
     var parentName by rememberSaveable { mutableStateOf(suggestedName) }
@@ -190,6 +191,7 @@ fun ParentSetupScreen(
                 ) { Text("Join family") }
             }
         }
+        TextButton(onClick = onDemo, enabled = !busy) { Text("Try the parent demo first") }
         TextButton(onClick = onBack, enabled = !busy) { Text("Sign out") }
     }
 }
