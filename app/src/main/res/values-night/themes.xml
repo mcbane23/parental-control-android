@@ -1,0 +1,4 @@
+<resources>
+    <!-- Dark window background, so the app does not flash white while it starts in dark mode. -->
+    <style name="Theme.ParentalControl" parent="android:Theme.Material.NoActionBar" />
+</resources>

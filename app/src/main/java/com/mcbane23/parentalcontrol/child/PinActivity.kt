@@ -6,12 +6,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -19,8 +24,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +37,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mcbane23.parentalcontrol.ui.AppTheme
+import com.mcbane23.parentalcontrol.ui.IconBubble
+import com.mcbane23.parentalcontrol.ui.Tone
 import com.mcbane23.parentalcontrol.data.AlertType
 import com.mcbane23.parentalcontrol.data.ParentPin
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +55,7 @@ class PinActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         if (!GuardState.armed) {
             finish()
             return
@@ -95,13 +102,15 @@ class PinActivity : ComponentActivity() {
                 }
             }
 
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+            AppTheme {
                 Surface(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
                     Column(
-                        modifier = Modifier.fillMaxSize().imePadding().padding(32.dp),
+                        modifier = Modifier.widthIn(max = 480.dp).fillMaxSize().padding(32.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        IconBubble(Icons.Filled.Lock, size = 72.dp)
                         Text(
                             "Parent PIN needed",
                             style = MaterialTheme.typography.headlineSmall,
@@ -111,6 +120,7 @@ class PinActivity : ComponentActivity() {
                             "This screen can remove or switch off Parental Control. A parent can open it " +
                                 "with the PIN. After that these screens can be opened for 5 minutes.",
                             textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         OutlinedTextField(
                             value = pin,
@@ -120,6 +130,8 @@ class PinActivity : ComponentActivity() {
                             },
                             label = { Text("PIN") },
                             singleLine = true,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
                             enabled = waitSeconds == 0 && !checking,
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -129,8 +141,11 @@ class PinActivity : ComponentActivity() {
                         Button(
                             onClick = { submit() },
                             enabled = waitSeconds == 0 && !checking && ParentPin.isValid(pin),
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth(),
                         ) { Text("Unlock") }
                         TextButton(onClick = ::goHome) { Text("Cancel") }
+                    }
                     }
                 }
             }

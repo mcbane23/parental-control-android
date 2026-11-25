@@ -1,23 +1,34 @@
 package com.mcbane23.parentalcontrol.ui
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mcbane23.parentalcontrol.AppViewModel
 import com.mcbane23.parentalcontrol.Screen
@@ -35,11 +46,31 @@ fun AppRoot(viewModel: AppViewModel, activity: Activity) {
         }
     }
 
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
-        Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    AppTheme {
+        // The navy header screens draw behind the status bar and need light icons there.
+        val navyHeader = state.screen is Screen.ParentHome || state.screen is Screen.ChildDetail ||
+            state.screen is Screen.ChildHome
+        val dark = isSystemInDarkTheme()
+        val view = LocalView.current
+        SideEffect {
+            WindowCompat.getInsetsController(activity.window, view).isAppearanceLightStatusBars = !dark && !navyHeader
+        }
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbar) },
+            // Each screen handles the top edge itself: a header fills it, other screens pad it.
+            contentWindowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+        ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
-                when (val screen = state.screen) {
-                    Screen.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                // Screens fade into each other. The key is the kind of screen, so fresh data
+                // on the same screen does not replay the fade.
+                AnimatedContent(
+                    targetState = state.screen,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    contentKey = { it::class },
+                    label = "screen",
+                ) { screen ->
+                when (screen) {
+                    Screen.Loading -> Box(Modifier.fillMaxSize().statusBarsPadding(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                     Screen.FirebaseMissing -> FirebaseMissingScreen()
@@ -96,6 +127,10 @@ fun AppRoot(viewModel: AppViewModel, activity: Activity) {
                         rules = state.childRules,
                         onReport = viewModel::reportOwnDevice,
                     )
+                }
+                }
+                if (state.busy) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.BottomCenter))
                 }
             }
         }

@@ -9,14 +9,23 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,7 +36,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -74,23 +85,37 @@ fun ChildHomeScreen(
     }
 
     val status = snapshot?.status
+    Column(Modifier.fillMaxSize()) {
+    AppHeader(title = family.name, subtitle = "This phone is managed by your family")
+    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
     Column(
         modifier = Modifier
+            .widthIn(max = 600.dp)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Family: ${family.name}", style = MaterialTheme.typography.headlineSmall)
-
         val setupDone = status == null ||
             (status.usageAccess && status.accessibility && status.locationAccess && status.deviceAdmin)
-        if (!setupDone) {
-            Text("Finish setup", style = MaterialTheme.typography.titleMedium)
-            Text("A parent should do these steps. All of them are needed for the rules, location and protection to work.")
+        if (status != null && !setupDone) {
+            val done = listOf(status.usageAccess, status.accessibility, status.locationAccess, status.deviceAdmin)
+                .count { it }
+            AppCard(containerColor = MaterialTheme.colorScheme.errorContainer) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Finish setup", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "A parent should do these steps. All of them are needed for the rules, location and protection to work.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    UsageBar(done / 4f)
+                    Text("$done of 4 steps done", style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
         if (status != null && !status.usageAccess) {
             SetupCard(
+                icon = Icons.Filled.DateRange,
                 title = "1. Usage access",
                 body = "Lets the app count how long each app is used. Find Parental Control in the list and switch it on.",
                 button = "Open usage access",
@@ -99,6 +124,7 @@ fun ChildHomeScreen(
         }
         if (status != null && !status.accessibility) {
             SetupCard(
+                icon = Icons.Filled.Settings,
                 title = "2. Accessibility",
                 body = "Lets the app see which app is open, so it can block it. Under Installed apps, " +
                     "choose Parental Control and switch it on.\n\n" +
@@ -114,6 +140,7 @@ fun ChildHomeScreen(
         if (status != null && !status.locationAccess) {
             if (!LocationPermissions.hasForeground(context)) {
                 SetupCard(
+                    icon = Icons.Filled.LocationOn,
                     title = "3. Location",
                     body = "Lets parents see where this phone is. Choose \"While using the app\" and " +
                         "\"Precise\", and allow notifications so the sharing notice can be shown.",
@@ -133,6 +160,7 @@ fun ChildHomeScreen(
                 )
             } else {
                 SetupCard(
+                    icon = Icons.Filled.LocationOn,
                     title = "3. Location, all the time",
                     body = "Choose \"Allow all the time\", so location keeps working when the app is closed " +
                         "and after the phone restarts. If nothing opens, use App info, then Permissions, then Location.",
@@ -150,6 +178,7 @@ fun ChildHomeScreen(
 
         if (status != null && !status.deviceAdmin) {
             SetupCard(
+                icon = Icons.Filled.Lock,
                 title = "4. Uninstall protection",
                 body = "Stops the app from being uninstalled from this phone. Tap Activate on the next screen. " +
                     "If the parent PIN is asked for first, enter it and tap this button again.",
@@ -158,9 +187,9 @@ fun ChildHomeScreen(
             )
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Protection", style = MaterialTheme.typography.titleMedium)
+        AppCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CardHeader(Icons.Filled.Lock, "Protection")
                 Text(
                     if (rules.requireMobileData) {
                         "Mobile data must stay on. Away from Wi-Fi, apps are locked while mobile data is " +
@@ -168,62 +197,93 @@ fun ChildHomeScreen(
                     } else {
                         "Mobile data may be switched off."
                     },
+                    style = MaterialTheme.typography.bodyMedium,
                 )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text(
                     if (rules.pinSet) {
                         "Removing or switching off this app needs the parent PIN."
                     } else {
                         "No parent PIN yet. A parent sets it from their own phone."
                     },
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Today", style = MaterialTheme.typography.titleMedium)
+        AppCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                CardHeader(Icons.Filled.DateRange, "Today")
                 val used = status?.usedTodayMs ?: 0L
                 val limit = rules.dailyLimitMinutes
-                if (limit == null) {
-                    Text("${formatDuration(used)} used. No daily limit is set.")
-                } else {
-                    val left = (limit * 60_000L - used).coerceAtLeast(0L)
-                    Text("${formatDuration(used)} used of ${formatMinutes(limit)}.")
-                    Text(if (left > 0) "${formatDuration(left)} left." else "Time is up for today.")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    if (limit != null) UsageRing(used / (limit * 60_000f))
+                    Column(Modifier.weight(1f)) {
+                        if (limit == null) {
+                            Text("${formatDuration(used)} used.", style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "No daily limit is set.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            val left = (limit * 60_000L - used).coerceAtLeast(0L)
+                            Text(
+                                if (left > 0) "${formatDuration(left)} left." else "Time is up for today.",
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                "${formatDuration(used)} used of ${formatMinutes(limit)}.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
         }
 
         val limited = rules.apps.filterValues { it.blocked || it.limitMinutes != null }
         if (limited.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("App rules", style = MaterialTheme.typography.titleMedium)
+            AppCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CardHeader(Icons.Filled.Menu, "App rules")
                     val labels = snapshot?.apps.orEmpty().associate { it.packageName to it.label }
                     limited.forEach { (pkg, rule) ->
                         val name = labels[pkg] ?: pkg
                         val limit = rule.limitMinutes
-                        Text(
-                            when {
-                                rule.blocked -> "$name: blocked"
-                                limit != null -> {
-                                    val used = snapshot?.usageMs?.get(pkg) ?: 0L
-                                    "$name: ${formatDuration(used)} of ${formatMinutes(limit)}"
+                        val used = snapshot?.usageMs?.get(pkg) ?: 0L
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                                when {
+                                    rule.blocked -> StatusChip("Blocked", Tone.Attention)
+                                    limit != null -> Text(
+                                        "${formatDuration(used)} of ${formatMinutes(limit)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
-                                else -> name
-                            },
-                        )
+                            }
+                            if (!rule.blocked && limit != null) UsageBar(used / (limit * 60_000f))
+                        }
                     }
                 }
             }
         }
 
-        AppVersion()
+        AppVersion(Modifier.padding(start = 4.dp))
+    }
+    }
     }
 }
 
 @Composable
 private fun SetupCard(
+    icon: ImageVector,
     title: String,
     body: String,
     button: String,
@@ -231,12 +291,14 @@ private fun SetupCard(
     secondButton: String? = null,
     onSecondClick: () -> Unit = {},
 ) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(body)
-            Button(onClick = onClick) { Text(button) }
-            if (secondButton != null) TextButton(onClick = onSecondClick) { Text(secondButton) }
+    AppCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            CardHeader(icon, title)
+            Text(body, style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = onClick, shape = MaterialTheme.shapes.small) { Text(button) }
+                if (secondButton != null) TextButton(onClick = onSecondClick) { Text(secondButton) }
+            }
         }
     }
 }

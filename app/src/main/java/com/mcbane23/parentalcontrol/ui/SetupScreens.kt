@@ -1,17 +1,28 @@
 package com.mcbane23.parentalcontrol.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -24,31 +35,53 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mcbane23.parentalcontrol.data.PairingCodes
 
+/** A centred, scrolling column that stays at a readable width on tablets. */
 @Composable
 private fun ScreenColumn(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) { content() }
+    Box(Modifier.fillMaxSize().statusBarsPadding(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 480.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) { content() }
+    }
+}
+
+/** The icon, title and one line of explanation that open a setup screen. */
+@Composable
+private fun ScreenIntro(icon: ImageVector, title: String, body: String?, tone: Tone = Tone.Accent) {
+    IconBubble(icon, tone = tone, size = 72.dp)
+    Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+    if (body != null) {
+        Text(
+            body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
 }
 
 @Composable
 fun FirebaseMissingScreen() {
     ScreenColumn {
-        Text("Firebase is not set up", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "This build has no google-services.json file. Follow docs/firebase-setup.md, " +
+        ScreenIntro(
+            icon = Icons.Filled.Warning,
+            title = "Firebase is not set up",
+            body = "This build has no google-services.json file. Follow docs/firebase-setup.md, " +
                 "put the file in the app folder and build again.",
-            textAlign = TextAlign.Center,
+            tone = Tone.Attention,
         )
     }
 }
@@ -56,24 +89,51 @@ fun FirebaseMissingScreen() {
 @Composable
 fun WelcomeScreen(busy: Boolean, onParent: () -> Unit, onChild: () -> Unit) {
     ScreenColumn {
-        Text("Parental Control", style = MaterialTheme.typography.headlineMedium)
-        Text("Who uses this phone?", style = MaterialTheme.typography.titleMedium)
+        ScreenIntro(Icons.Filled.Lock, "Parental Control", "Who uses this phone?")
         Spacer(Modifier.height(8.dp))
-        Button(onClick = onParent, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text("I'm a parent")
-        }
-        Text(
-            "Sign in with Google to manage your family.",
-            style = MaterialTheme.typography.bodySmall,
+        ChoiceCard(
+            icon = Icons.Filled.Person,
+            title = "I'm a parent",
+            body = "Sign in with Google to manage your family.",
+            enabled = !busy,
+            onClick = onParent,
         )
-        OutlinedButton(onClick = onChild, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text("This is my child's phone")
-        }
-        Text(
-            "You will need a pairing code from a parent's phone.",
-            style = MaterialTheme.typography.bodySmall,
+        ChoiceCard(
+            icon = Icons.Filled.Face,
+            title = "This is my child's phone",
+            body = "You will need a pairing code from a parent's phone.",
+            enabled = !busy,
+            onClick = onChild,
         )
+        Spacer(Modifier.height(8.dp))
         AppVersion()
+    }
+}
+
+/** One of the big choices on the welcome screen. */
+@Composable
+private fun ChoiceCard(icon: ImageVector, title: String, body: String, enabled: Boolean, onClick: () -> Unit) {
+    AppCard(onClick = onClick, enabled = enabled) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            IconBubble(icon, size = 44.dp)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -90,36 +150,46 @@ fun ParentSetupScreen(
     var code by rememberSaveable { mutableStateOf("") }
 
     ScreenColumn {
-        Text("Set up your family", style = MaterialTheme.typography.headlineSmall)
+        ScreenIntro(Icons.Filled.Person, "Set up your family", null)
         OutlinedTextField(
             value = parentName,
             onValueChange = { parentName = it },
             label = { Text("Your name") },
             singleLine = true,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth(),
         )
-        HorizontalDivider()
-        Text("Start a new family", style = MaterialTheme.typography.titleMedium)
-        OutlinedTextField(
-            value = familyName,
-            onValueChange = { familyName = it },
-            label = { Text("Family name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(
-            onClick = { onCreateFamily(familyName, parentName) },
-            enabled = !busy && familyName.isNotBlank() && parentName.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Create family") }
-        HorizontalDivider()
-        Text("Or join one with an invite code", style = MaterialTheme.typography.titleMedium)
-        CodeField(code = code, onChange = { code = it })
-        OutlinedButton(
-            onClick = { onJoinFamily(code, parentName) },
-            enabled = !busy && PairingCodes.isWellFormed(code) && parentName.isNotBlank(),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Join family") }
+        AppCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Start a new family", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = familyName,
+                    onValueChange = { familyName = it },
+                    label = { Text("Family name") },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = { onCreateFamily(familyName, parentName) },
+                    enabled = !busy && familyName.isNotBlank() && parentName.isNotBlank(),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Create family") }
+            }
+        }
+        AppCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Or join one with an invite code", style = MaterialTheme.typography.titleMedium)
+                CodeField(code = code, onChange = { code = it })
+                OutlinedButton(
+                    onClick = { onJoinFamily(code, parentName) },
+                    enabled = !busy && PairingCodes.isWellFormed(code) && parentName.isNotBlank(),
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Join family") }
+            }
+        }
         TextButton(onClick = onBack, enabled = !busy) { Text("Sign out") }
     }
 }
@@ -134,22 +204,24 @@ fun ChildPairingScreen(
     var code by rememberSaveable { mutableStateOf("") }
 
     ScreenColumn {
-        Text("Pair this phone", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "On a parent's phone, tap \"Add child's phone\" and type the code shown there.",
-            textAlign = TextAlign.Center,
+        ScreenIntro(
+            icon = Icons.Filled.Phone,
+            title = "Pair this phone",
+            body = "On a parent's phone, tap \"Add child's phone\" and type the code shown there.",
         )
         OutlinedTextField(
             value = childName,
             onValueChange = { childName = it },
             label = { Text("Child's name") },
             singleLine = true,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth(),
         )
         CodeField(code = code, onChange = { code = it })
         Button(
             onClick = { onPair(code, childName) },
             enabled = !busy && PairingCodes.isWellFormed(code) && childName.isNotBlank(),
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Pair") }
         TextButton(onClick = onBack, enabled = !busy) { Text("Back") }
@@ -163,7 +235,9 @@ private fun CodeField(code: String, onChange: (String) -> Unit) {
         onValueChange = { onChange(PairingCodes.normalize(it).take(PairingCodes.LENGTH)) },
         label = { Text("Code") },
         singleLine = true,
+        textStyle = MaterialTheme.typography.titleLarge.copy(letterSpacing = 4.sp),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth(),
     )
 }

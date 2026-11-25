@@ -8,23 +8,30 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.mcbane23.parentalcontrol.ui.AppTheme
+import com.mcbane23.parentalcontrol.ui.IconBubble
+import com.mcbane23.parentalcontrol.ui.Tone
 import com.mcbane23.parentalcontrol.data.BlockReason
 import com.mcbane23.parentalcontrol.data.DataLock
 import kotlinx.coroutines.delay
@@ -34,6 +41,7 @@ class BlockedActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val appLabel = intent.getStringExtra(EXTRA_LABEL).orEmpty()
         val reason = runCatching { BlockReason.valueOf(intent.getStringExtra(EXTRA_REASON).orEmpty()) }
             .getOrDefault(BlockReason.BLOCKED)
@@ -52,13 +60,15 @@ class BlockedActivity : ComponentActivity() {
                     }
                 }
             }
-            MaterialTheme(colorScheme = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()) {
+            AppTheme {
                 Surface(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize().safeDrawingPadding(), contentAlignment = Alignment.Center) {
                     Column(
-                        modifier = Modifier.fillMaxSize().padding(32.dp),
+                        modifier = Modifier.widthIn(max = 480.dp).fillMaxSize().padding(32.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        IconBubble(Icons.Filled.Lock, tone = Tone.Attention, size = 72.dp)
                         Text(
                             when (reason) {
                                 BlockReason.BLOCKED -> "$appLabel is blocked"
@@ -80,13 +90,19 @@ class BlockedActivity : ComponentActivity() {
                                         "connect to Wi-Fi. Phone calls still work."
                             },
                             textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        val wide = Modifier.fillMaxWidth()
+                        val shape = MaterialTheme.shapes.small
                         if (reason == BlockReason.MOBILE_DATA_OFF) {
-                            Button(onClick = ::openNetworkSettings) { Text("Open network settings") }
-                            OutlinedButton(onClick = ::goHome) { Text("OK") }
+                            Button(onClick = ::openNetworkSettings, modifier = wide, shape = shape) {
+                                Text("Open network settings")
+                            }
+                            OutlinedButton(onClick = ::goHome, modifier = wide, shape = shape) { Text("OK") }
                         } else {
-                            Button(onClick = ::goHome) { Text("OK") }
+                            Button(onClick = ::goHome, modifier = wide, shape = shape) { Text("OK") }
                         }
+                    }
                     }
                 }
             }
