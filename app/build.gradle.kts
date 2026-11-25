@@ -8,15 +8,15 @@ plugins {
 
 android {
     namespace = "com.mcbane23.parentalcontrol"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // Must match the package name registered in Firebase (app/google-services.json).
         applicationId = "com.bane23.parentalcontrol"
         minSdk = 28
-        targetSdk = 35
-        versionCode = 6
-        versionName = "0.4.0"
+        targetSdk = 36
+        versionCode = 7
+        versionName = "0.4.1"
     }
 
     // Debug builds, local or on GitHub, are signed with the debug key kept in the repository.
